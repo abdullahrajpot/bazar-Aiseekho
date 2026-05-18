@@ -25,6 +25,7 @@ interface CrisisMapViewProps {
   shopsRecord: Record<string, any>;
   claims?: TruthClaim[];
   selectedArea?: string | null;
+  signals?: any[];
   height?: number;
 }
 
@@ -51,6 +52,7 @@ export const CrisisMapView: React.FC<CrisisMapViewProps> = ({
   shopsRecord,
   claims = [],
   selectedArea,
+  signals = [],
   height = 320,
 }) => {
   const mapRef = useRef<MapView>(null);
@@ -65,11 +67,36 @@ export const CrisisMapView: React.FC<CrisisMapViewProps> = ({
     return list;
   }, []);
 
+  const [region, setRegion] = useState({
+    latitude: 24.89,
+    longitude: 67.04,
+    latitudeDelta: 0.12,
+    longitudeDelta: 0.12,
+  });
+
   const activeCoord = useMemo(() => {
     if (!selectedArea) return null;
     const key = normalizeAreaKey(selectedArea);
     return AREA_COORDINATES[key] || null;
   }, [selectedArea]);
+
+  useEffect(() => {
+    if (activeCoord) {
+      setRegion({
+        latitude: activeCoord.latitude,
+        longitude: activeCoord.longitude,
+        latitudeDelta: 0.04,
+        longitudeDelta: 0.04,
+      });
+    } else {
+      setRegion({
+        latitude: 24.89,
+        longitude: 67.04,
+        latitudeDelta: 0.12,
+        longitudeDelta: 0.12,
+      });
+    }
+  }, [activeCoord]);
 
   const fitRoutes = useCallback(() => {
     if (!mapRef.current) return;
@@ -104,11 +131,9 @@ export const CrisisMapView: React.FC<CrisisMapViewProps> = ({
       <MapView
         ref={mapRef}
         style={styles.map}
-        provider={PROVIDER_GOOGLE}
-        initialRegion={DEFAULT_REGION}
+        region={region}
         onMapReady={() => {
           setMapReady(true);
-          fitRoutes();
         }}
         mapPadding={{ top: 8, right: 0, bottom: 72, left: 0 }}
         rotateEnabled={false}
