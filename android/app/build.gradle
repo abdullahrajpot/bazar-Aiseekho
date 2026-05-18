@@ -1,6 +1,7 @@
 apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
+apply from: "../../node_modules/react-native-vector-icons/fonts.gradle"
 
 /**
  * This is the configuration block to customize your React Native Android app.
@@ -72,6 +73,22 @@ def enableProguardInReleaseBuilds = false
  */
 def jscFlavor = 'org.webkit:android-jsc:+'
 
+// Load Google Maps key from project root .env
+def loadEnvMapsKey = {
+    def envFile = rootProject.file("../.env")
+    if (!envFile.exists()) return ""
+    def key = ""
+    envFile.eachLine { line ->
+        def trimmed = line.trim()
+        if (trimmed.startsWith("#") || !trimmed.contains("=")) return
+        def parts = trimmed.split("=", 2)
+        if (parts[0].trim() == "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY") {
+            key = parts[1].trim().replaceAll('"', '')
+        }
+    }
+    return key
+}
+
 android {
     ndkVersion rootProject.ext.ndkVersion
     buildToolsVersion rootProject.ext.buildToolsVersion
@@ -79,11 +96,12 @@ android {
 
     namespace "com.bazar_new"
     defaultConfig {
-        applicationId "com.bazar_new"
+        applicationId "com.bazar"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
         versionName "1.0"
+        resValue "string", "google_maps_key", loadEnvMapsKey()
     }
     signingConfigs {
         debug {
@@ -110,6 +128,11 @@ android {
 dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
+    implementation platform('com.google.firebase:firebase-bom:32.0.0')
+    implementation 'com.google.firebase:firebase-analytics'
+    implementation 'com.google.firebase:firebase-auth'
+    implementation 'com.google.firebase:firebase-firestore'
+    implementation 'com.google.firebase:firebase-messaging'
 
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")
@@ -117,3 +140,4 @@ dependencies {
         implementation jscFlavor
     }
 }
+apply plugin: 'com.google.gms.google-services'

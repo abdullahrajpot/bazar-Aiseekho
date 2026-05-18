@@ -1,0 +1,10 @@
+{
+  "atta_10kg": { "normal": 980, "crisis_max": 1150 },
+  "chini_1kg": { "normal": 120, "crisis_max": 145 },
+  "pyaz_1kg": { "normal": 85, "crisis_max": 110 },
+  "doodh_1l": { "normal": 180, "crisis_max": 210 },
+  "lpg_cylinder": { "normal": 2800, "crisis_max": 3200 },
+  "chawal_5kg": { "normal": 650, "crisis_max": 780 },
+  "tamatar_1kg": { "normal": 100, "crisis_max": 130 },
+  "aloo_1kg": { "normal": 80, "crisis_max": 100 }
+}

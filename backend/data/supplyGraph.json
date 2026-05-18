@@ -1,0 +1,33 @@
+{
+  "nodes": [
+    { "id": "sabzi_mandi_main", "tier": 1, "name": "Main Sabzi Mandi", "goods": ["vegetables", "fruit"], "location": { "lat": 24.8607, "lng": 67.0011 } },
+    { "id": "atta_chakki_sher", "tier": 1, "name": "Sher Shah Atta Chakki", "goods": ["atta", "chawal"], "location": { "lat": 24.8632, "lng": 67.0104 } },
+    { "id": "lpg_depot_north", "tier": 1, "name": "North Karachi LPG Depot", "goods": ["lpg_cylinder"], "location": { "lat": 24.9721, "lng": 67.0652 } },
+    { "id": "kiryana_dist_site", "tier": 1, "name": "SITE Kiryana Distributor", "goods": ["atta", "tel_cooking", "doodh_1l", "chawal_5kg"], "location": { "lat": 24.878, "lng": 67.0201 } },
+    { "id": "truck_route_M9", "tier": 2, "name": "M9 Truck Route", "road": "M9", "goods": ["all"] },
+    { "id": "truck_route_N55", "tier": 2, "name": "N55 Alternate", "road": "N55", "goods": ["all"] },
+    { "id": "truck_route_SHP", "tier": 2, "name": "Super Highway", "road": "SHP", "goods": ["atta", "vegetables"] },
+    { "id": "donkey_cart_local", "tier": 2, "name": "Local donkey cart network", "road": "local", "goods": ["vegetables", "fruit"] },
+    { "id": "rehri_surjani", "tier": 3, "name": "Rehri vendors — Surjani", "area": "surjani", "goods": ["vegetables", "fruit"] },
+    { "id": "kiryana_surjani", "tier": 3, "name": "Kiryana shops — Surjani", "area": "surjani", "goods": ["atta", "chawal", "tel_cooking", "lpg_cylinder"] },
+    { "id": "rehri_orangi", "tier": 3, "name": "Rehri vendors — Orangi", "area": "orangi", "goods": ["vegetables", "fruit"] },
+    { "id": "kiryana_orangi", "tier": 3, "name": "Kiryana shops — Orangi", "area": "orangi", "goods": ["atta", "chawal", "tel_cooking", "lpg_cylinder"] }
+  ],
+  "edges": [
+    { "from": "sabzi_mandi_main", "to": "truck_route_M9", "road": "M9", "travelMins": 40 },
+    { "from": "atta_chakki_sher", "to": "truck_route_M9", "road": "M9", "travelMins": 35 },
+    { "from": "lpg_depot_north", "to": "truck_route_M9", "road": "M9", "travelMins": 50 },
+    { "from": "truck_route_M9", "to": "rehri_surjani", "road": "local", "travelMins": 20 },
+    { "from": "truck_route_M9", "to": "kiryana_surjani", "road": "local", "travelMins": 25 },
+    { "from": "truck_route_M9", "to": "kiryana_orangi", "road": "local", "travelMins": 30 },
+    { "from": "truck_route_N55", "to": "kiryana_surjani", "road": "local", "travelMins": 55 },
+    { "from": "truck_route_N55", "to": "kiryana_orangi", "road": "local", "travelMins": 60 },
+    { "from": "donkey_cart_local", "to": "rehri_surjani", "road": "local", "travelMins": 15 },
+    { "from": "donkey_cart_local", "to": "rehri_orangi", "road": "local", "travelMins": 20 }
+  ],
+  "alternates": [
+    { "brokenRoad": "M9", "alternateRoute": "N55", "extraMins": 30, "goods": ["all"] },
+    { "brokenRoad": "M9", "alternateRoute": "local", "extraMins": 45, "goods": ["vegetables"] },
+    { "brokenRoad": "SHP", "alternateRoute": "M9", "extraMins": 20, "goods": ["atta"] }
+  ]
+}

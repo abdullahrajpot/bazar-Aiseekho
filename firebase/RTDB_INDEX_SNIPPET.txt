@@ -1,0 +1,15 @@
+Merge this into Firebase Console → Realtime Database → Rules (keep your own .read/.write auth if you use it).
+
+Add under the root rules object:
+
+  "agent_log": {
+    ".indexOn": "timestamp"
+  },
+
+  "truth_feed": {
+    ".indexOn": "timestamp"
+  }
+
+This removes the client-side warning when querying agent_log ordered by timestamp.
+
+If your rules already define "agent_log", add only the ".indexOn": "timestamp" line inside that block.
