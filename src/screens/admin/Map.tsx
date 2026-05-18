@@ -81,7 +81,7 @@ const MapScreen = () => {
           nestedScrollEnabled={Platform.OS === 'android'}
         >
           <View style={styles.mapCard}>
-            <CrisisMapView routes={routes} shopsRecord={shopsRecord} claims={claims} />
+            <CrisisMapView routes={routes} shopsRecord={shopsRecord} claims={claims} selectedArea={displayArea} />
           </View>
 
           {activeTab === 'routes' ? (

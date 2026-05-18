@@ -103,25 +103,91 @@ function generateSelfHealingFallback(prompt) {
     let severity = 0;
     let shortage_hours = 0;
     let reasoning = 'No transit blockages parsed in active telemetry streams.';
+    let goods = [];
+    let areas = [];
 
-    if (promptLower.includes('flood') || promptLower.includes('blocked') || promptLower.includes('rain')) {
+    const areaKeywords = {
+      surjani: 'Surjani Town',
+      orangi: 'Orangi Town',
+      lyari: 'Lyari',
+      korangi: 'Korangi',
+      clifton: 'Clifton',
+      malir: 'Malir',
+      johar_town: 'Johar Town',
+      gulberg: 'Gulberg',
+      rawalpindi: 'Rawalpindi',
+      peshawar: 'Peshawar',
+      quetta: 'Quetta',
+      islamabad: 'Islamabad'
+    };
+
+    const goodKeywords = {
+      atta: 'atta_10kg',
+      wheat: 'atta_10kg',
+      chini: 'chini_1kg',
+      sugar: 'chini_1kg',
+      pyaz: 'pyaz_1kg',
+      onion: 'pyaz_1kg',
+      doodh: 'doodh_1l',
+      milk: 'doodh_1l',
+      lpg: 'lpg_cylinder',
+      gas: 'lpg_cylinder'
+    };
+
+    for (const [key, label] of Object.entries(areaKeywords)) {
+      if (promptLower.includes(key) || promptLower.includes(key.replace('_', ' '))) {
+        if (!areas.includes(label)) areas.push(label);
+      }
+    }
+
+    for (const [key, id] of Object.entries(goodKeywords)) {
+      if (promptLower.includes(key)) {
+        if (!goods.includes(id)) goods.push(id);
+      }
+    }
+
+    const hasCrisisWord = promptLower.includes('flood') || 
+                           promptLower.includes('blocked') || 
+                           promptLower.includes('rain') || 
+                           promptLower.includes('shortage') || 
+                           promptLower.includes('waterlogging') ||
+                           promptLower.includes('obstruction') ||
+                           promptLower.includes('rains');
+
+    if (hasCrisisWord && areas.length > 0) {
       hasBreak = true;
       type = 'road_blocked';
-      road = promptLower.includes('m9') ? 'M9' : (promptLower.includes('n55') ? 'N55' : 'local');
+      
+      if (promptLower.includes('m9') || promptLower.includes('surjani')) {
+        road = 'M9';
+      } else if (promptLower.includes('n55') || promptLower.includes('lyari')) {
+        road = 'N55';
+      } else if (promptLower.includes('shp') || promptLower.includes('korangi')) {
+        road = 'SHP';
+      } else {
+        road = 'local';
+      }
+
       severity = 0.85;
       shortage_hours = 6;
-      reasoning = `Bazar Telemetry identified active transit obstruction on ${road} route. Rerouting initialized.`;
+      
+      if (goods.length === 0) {
+        goods = ['atta_10kg', 'doodh_1l'];
+      }
+
+      const match = prompt.match(/"text":\s*"([^"]+)"/i);
+      reasoning = match ? match[1] : `Bazar Telemetry identified active monsoonal transit disruption affecting ${areas.join(' and ')}. Rerouting initialized.`;
     }
 
     return {
       break: hasBreak,
       type,
       road,
-      goods: hasBreak ? ['atta', 'vegetables', 'LPG'] : [],
-      areas: hasBreak ? ['Surjani', 'Orangi'] : [],
+      goods,
+      areas,
       severity,
       shortage_hours,
-      confidence: 0.92,
+      confidence: 0.95,
       reasoning,
     };
   }

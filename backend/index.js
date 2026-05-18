@@ -25,20 +25,34 @@ async function runSupplyCycle() {
 
 async function runRumourCycle() {
   const signals = await aggregateSignals();
-  const socialSources = new Set(['twitter', 'reddit', 'google_news']);
+  const socialSources = new Set(['twitter', 'reddit', 'google_news', 'whatsapp']);
   const socialSignals = signals.filter((s) => socialSources.has(s.source));
 
+  if (!db) return;
+
+  // Retrieve existing claims in the last 100 entries of truth_feed to avoid duplicates
+  const existingClaimsSnap = await db.ref('truth_feed').limitToLast(100).once('value');
+  const existingClaims = existingClaimsSnap.val() || {};
+  const existingTexts = new Set(
+    Object.values(existingClaims).map(c => (c.text || '').toLowerCase().trim())
+  );
+
   for (const signal of socialSignals) {
+    const textNorm = (signal.text || '').toLowerCase().trim();
+    if (existingTexts.has(textNorm)) continue;
+
     const key = signal.tweetId || signal.permalink || signal.link || signal.text?.slice(0, 80);
-    if (!key || processedSocial.has(key)) continue;
+    if (key && processedSocial.has(key)) continue;
 
     const result = await detectRumours(signal.text, signals);
     if (result.verdict !== 'unverified' && result.confidence > 0.6) {
       await publishTruth(result, signal);
-      processedSocial.add(key);
-      if (processedSocial.size > 500) {
-        const first = processedSocial.values().next().value;
-        processedSocial.delete(first);
+      if (key) {
+        processedSocial.add(key);
+        if (processedSocial.size > 500) {
+          const first = processedSocial.values().next().value;
+          processedSocial.delete(first);
+        }
       }
     }
   }

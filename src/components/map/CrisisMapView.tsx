@@ -10,6 +10,7 @@ import {
   SHOP_COLORS,
 } from '../../lib/constants';
 import { TruthClaim } from '../../hooks/useTruthFeed';
+import { normalizeAreaKey } from '../../lib/area';
 
 /** Karachi supply corridor — keeps map on Pakistan even before native tiles load */
 const DEFAULT_REGION = {
@@ -23,6 +24,7 @@ interface CrisisMapViewProps {
   routes: Record<string, any>;
   shopsRecord: Record<string, any>;
   claims?: TruthClaim[];
+  selectedArea?: string | null;
   height?: number;
 }
 
@@ -48,6 +50,7 @@ export const CrisisMapView: React.FC<CrisisMapViewProps> = ({
   routes,
   shopsRecord,
   claims = [],
+  selectedArea,
   height = 320,
 }) => {
   const mapRef = useRef<MapView>(null);
@@ -62,19 +65,34 @@ export const CrisisMapView: React.FC<CrisisMapViewProps> = ({
     return list;
   }, []);
 
+  const activeCoord = useMemo(() => {
+    if (!selectedArea) return null;
+    const key = normalizeAreaKey(selectedArea);
+    return AREA_COORDINATES[key] || null;
+  }, [selectedArea]);
+
   const fitRoutes = useCallback(() => {
-    if (!mapRef.current || routeCoords.length < 2) return;
-    mapRef.current.fitToCoordinates(routeCoords, {
-      edgePadding: { top: 48, right: 28, bottom: 100, left: 28 },
-      animated: Platform.OS === 'ios',
-    });
-  }, [routeCoords]);
+    if (!mapRef.current) return;
+    if (activeCoord) {
+      mapRef.current.animateToRegion({
+        latitude: activeCoord.latitude,
+        longitude: activeCoord.longitude,
+        latitudeDelta: 0.04,
+        longitudeDelta: 0.04,
+      }, 1000);
+    } else if (routeCoords.length >= 2) {
+      mapRef.current.fitToCoordinates(routeCoords, {
+        edgePadding: { top: 48, right: 28, bottom: 100, left: 28 },
+        animated: Platform.OS === 'ios',
+      });
+    }
+  }, [routeCoords, activeCoord]);
 
   useEffect(() => {
     if (!mapReady) return;
     const id = setTimeout(fitRoutes, Platform.OS === 'android' ? 400 : 100);
     return () => clearTimeout(id);
-  }, [mapReady, fitRoutes, routes]);
+  }, [mapReady, fitRoutes, routes, activeCoord]);
 
   const rumourAreas = claims
     .filter((c) => c.verdict === 'false' && c.area)

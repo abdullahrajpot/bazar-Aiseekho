@@ -128,15 +128,21 @@ async function persistBreakResult(breakResult, signals) {
     });
   }
 
-  // Write 2: agent log
-  await db.ref('agent_log').push({
-    agent: 'supply_break_detector',
-    action: breakResult.break ? 'break_confirmed' : 'all_clear',
-    detail: breakResult.reasoning,
-    severity: breakResult.break ? 'critical' : 'info',
-    rawOutput: JSON.stringify(breakResult),
-    timestamp: Date.now(),
-  });
+  // Write 2: agent log (only on status/reasoning change)
+  const lastLogSnap = await db.ref('agent_log').orderByChild('timestamp').limitToLast(1).once('value');
+  const lastLog = lastLogSnap.val() ? Object.values(lastLogSnap.val())[0] : null;
+  const targetAction = breakResult.break ? 'break_confirmed' : 'all_clear';
+
+  if (!lastLog || lastLog.detail !== breakResult.reasoning || lastLog.action !== targetAction) {
+    await db.ref('agent_log').push({
+      agent: 'supply_break_detector',
+      action: targetAction,
+      detail: breakResult.reasoning,
+      severity: breakResult.break ? 'critical' : 'info',
+      rawOutput: JSON.stringify(breakResult),
+      timestamp: Date.now(),
+    });
+  }
 
   // Write 3: admin stats
   if (breakResult.break) {

@@ -5,7 +5,8 @@ import { useUserStore } from '../store/userStore';
 import { COLORS, AREAS } from '../lib/constants';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { signOut } from 'firebase/auth';
-import { auth } from '../lib/firebase';
+import { auth, db } from '../lib/firebase';
+import { ref, update } from 'firebase/database';
 
 const Profile = () => {
   const { uid, role, area, shopId, logout, setRoleInfo } = useUserStore();
@@ -33,13 +34,22 @@ const Profile = () => {
     );
   };
 
-  const pickArea = (label: string) => {
+  const pickArea = async (label: string) => {
     if (!role) {
       Alert.alert('Role required', 'Sign in as khareedar, dukandar, or admin first.');
       return;
     }
-    setRoleInfo(role, label);
+    const areaFormatted = label.toLowerCase().replace(/\s+/g, '_').replace(/—/g, '_').replace(/_+/g, '_');
+    setRoleInfo(role, areaFormatted);
     setPickerOpen(false);
+
+    if (uid) {
+      try {
+        await update(ref(db, `users/${uid}`), { area: areaFormatted });
+      } catch (err: any) {
+        console.warn('Could not update area in Firebase:', err.message);
+      }
+    }
   };
 
   return (
@@ -89,8 +99,7 @@ const Profile = () => {
                 </View>
               ) : null}
               <Text style={styles.areaHint}>
-                Truth feed, fair prices, and gouging lists follow this area. Supply map stays on Karachi monitored
-                highways (national corridor).
+                Truth feed, fair prices, gouging shops, and the active map viewport dynamically pan to follow your selected area.
               </Text>
             </View>
           </View>

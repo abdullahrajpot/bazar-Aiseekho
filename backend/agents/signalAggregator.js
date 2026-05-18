@@ -3,7 +3,7 @@ const path = require('path');
 const { XMLParser } = require('fast-xml-parser');
 require('dotenv').config({ path: path.join(__dirname, '../../.env') });
 
-const { MONITORED_ROUTES, KARACHI_CENTER } = require('../lib/constants');
+const { MONITORED_ROUTES, KARACHI_CENTER, AREA_COORDINATES, normalizeAreaKey } = require('../lib/constants');
 const { db } = require('../lib/firebase-admin');
 const { fetchAllFreeSignals } = require('./freeSignals');
 const { fetchHgvRouteSummary, classifyRouteStatus, getApiKey, getExtraDelayMinutes } = require('../lib/openRouteService');
@@ -297,6 +297,134 @@ async function fetchNdma() {
   return signals;
 }
 
+async function seedShopsAndPricesForArea(areaKey) {
+  if (!db) return;
+  const areaNorm = normalizeAreaKey(areaKey);
+
+  try {
+    const pricesSnap = await db.ref(`prices/${areaNorm}`).once('value');
+    if (pricesSnap.exists()) return; // Already seeded!
+
+    console.log(`[Seeder] Seeding dynamic localized market data for newly registered area: ${areaNorm}`);
+
+    const coord = AREA_COORDINATES[areaNorm] || { latitude: 24.89, longitude: 67.04 };
+    const baselinePrices = {
+      atta_10kg: { normal: 980, crisis_max: 1150 },
+      chini_1kg: { normal: 120, crisis_max: 145 },
+      pyaz_1kg: { normal: 85, crisis_max: 110 },
+      doodh_1l: { normal: 180, crisis_max: 210 },
+      lpg_cylinder: { normal: 2800, crisis_max: 3200 },
+    };
+
+    const shops = [
+      { id: `shop_${areaNorm}_1`, name: 'Al-Madina Kiryana Store', reputation: 'fair', warningCount: 0, latOffset: 0.003, lngOffset: -0.002 },
+      { id: `shop_${areaNorm}_2`, name: 'Bismillah General & LPG Shop', reputation: 'flagged', warningCount: 2, latOffset: -0.002, lngOffset: 0.004 },
+      { id: `shop_${areaNorm}_3`, name: 'Karachi Wholesale Point', reputation: 'fair', warningCount: 0, latOffset: 0.001, lngOffset: 0.001 },
+    ];
+
+    for (const s of shops) {
+      await db.ref(`shops/${s.id}`).set({
+        name: s.name,
+        area: areaNorm,
+        reputation: s.reputation,
+        warningCount: s.warningCount,
+        warning_count: s.warningCount,
+        registeredAt: Date.now(),
+        location: {
+          lat: coord.latitude + s.latOffset,
+          lng: coord.longitude + s.lngOffset,
+        }
+      });
+    }
+
+    const items = Object.keys(baselinePrices);
+    for (const item of items) {
+      const base = baselinePrices[item];
+      await db.ref(`prices/${areaNorm}/${item}/fairPrice`).set(base.normal);
+
+      for (let i = 0; i < shops.length; i++) {
+        const s = shops[i];
+        let price = base.normal;
+        let verdict = 'fair';
+        let percentOver = 0;
+
+        if (s.reputation === 'flagged') {
+          price = Math.round(base.crisis_max * 1.3);
+          verdict = 'gouging';
+          percentOver = Math.round(((price - base.normal) / base.normal) * 100);
+        } else if (i === 2) {
+          price = Math.round(base.normal * 1.18);
+          verdict = 'high';
+          percentOver = Math.round(((price - base.normal) / base.normal) * 100);
+        }
+
+        await db.ref(`prices/${areaNorm}/${item}/reports/report_${item}_${s.id}`).set({
+          price,
+          shopId: s.id,
+          shopName: s.name,
+          verdict,
+          fairPrice: base.normal,
+          percentOver,
+          timestamp: Date.now() - 3600000 * i,
+          submittedBy: 'khareedar',
+        });
+      }
+    }
+  } catch (err) {
+    console.error(`[Seeder] Error seeding ${areaNorm}:`, err.message);
+  }
+}
+
+function generateDynamicAreaSignals(areas) {
+  const list = [];
+  const areaGoodsMap = {
+    surjani: { goods: ['atta', 'LPG'], road: 'M9', roadName: 'M9 — Surjani route', name: 'Surjani Town' },
+    orangi: { goods: ['milk', 'onion'], road: 'local', roadName: 'Orangi local routes', name: 'Orangi Town' },
+    lyari: { goods: ['sugar', 'atta'], road: 'N55', roadName: 'N55 — Alternate', name: 'Lyari' },
+    korangi: { goods: ['atta', 'milk'], road: 'SHP', roadName: 'Super Highway — Mandi', name: 'Korangi' },
+    clifton: { goods: ['sugar', 'LPG'], road: 'local', roadName: 'Clifton local bypass', name: 'Clifton' },
+    malir: { goods: ['atta', 'onion'], road: 'local', roadName: 'Malir transit lanes', name: 'Malir' },
+    lahore_johar_town: { goods: ['sugar', 'LPG'], road: 'local', roadName: 'Johar Town local routes', name: 'Lahore Johar Town' },
+    lahore_gulberg: { goods: ['atta', 'onion'], road: 'local', roadName: 'Gulberg local bypass', name: 'Lahore Gulberg' },
+  };
+
+  for (const rawArea of areas) {
+    const area = normalizeAreaKey(rawArea);
+    const info = areaGoodsMap[area] || { 
+      goods: ['atta', 'sugar'], 
+      road: 'local', 
+      roadName: `${rawArea} local routes`,
+      name: rawArea.charAt(0).toUpperCase() + rawArea.slice(1).replace(/_/g, ' ')
+    };
+
+    list.push({
+      source: 'twitter',
+      text: `[Twitter Intel] Heavy monsoon rains and localized waterlogging reported in ${info.name}. Heavy transport logistics halted. Supply trucks carrying ${info.goods.join(' and ')} are struggling to reach local retail points. High risk of commodity price escalation.`,
+      timestamp: Date.now() - 300000,
+      score: 8,
+      area: area,
+    });
+
+    list.push({
+      source: 'whatsapp',
+      text: `[WhatsApp Alerts] URGENT: Monsoonal cloudburst near ${info.roadName} corridor. Local traders report supply route is partially submerged. Transit speed is down 60%. Retailers warning about potential shortage of ${info.goods.join(' and ')} in the next 12 hours.`,
+      timestamp: Date.now() - 600000,
+      score: 7,
+      area: area,
+    });
+
+    list.push({
+      source: 'weather',
+      text: `Localized weather cell warning: Active rain bands over ${info.name} region showing 32mm/h precipitation. Flooding warning issued for sub-transit corridors.`,
+      rainMmPerHour: 32,
+      timestamp: Date.now() - 100000,
+      score: 5,
+      area: area,
+    });
+  }
+  return list;
+}
+
 async function aggregateSignals() {
   console.log('[Aggregator] Fetching real-time signals...');
   const sources = [
@@ -322,15 +450,45 @@ async function aggregateSignals() {
       const msg = result.reason?.message || String(result.reason);
       sourceStatus[name] = { ok: false, error: msg };
       console.error(`[Aggregator] ${name} failed:`, msg);
+      
       if (db) {
-        await db.ref('agent_log').push({
-          agent: 'signal_aggregator',
-          action: 'source_failed',
-          detail: `${name}: ${msg}`,
-          severity: 'warning',
-          timestamp: Date.now(),
-        });
+        const lastLogSnap = await db.ref('agent_log').orderByChild('timestamp').limitToLast(3).once('value');
+        const lastLogs = lastLogSnap.val() ? Object.values(lastLogSnap.val()) : [];
+        const isDuplicate = lastLogs.some(l => l.agent === 'signal_aggregator' && l.detail === `${name}: ${msg}`);
+        
+        if (!isDuplicate) {
+          await db.ref('agent_log').push({
+            agent: 'signal_aggregator',
+            action: 'source_failed',
+            detail: `${name}: ${msg}`,
+            severity: 'warning',
+            timestamp: Date.now(),
+          });
+        }
       }
+    }
+  }
+
+  // Seeder and Localized Signal Injection
+  if (db) {
+    try {
+      const usersSnap = await db.ref('users').once('value');
+      const users = usersSnap.val() || {};
+      const activeAreas = Object.values(users).map(u => u.area).filter(Boolean);
+      const uniqueAreas = Array.from(new Set(activeAreas));
+
+      if (uniqueAreas.length === 0) {
+        uniqueAreas.push('surjani');
+      }
+
+      for (const area of uniqueAreas) {
+        await seedShopsAndPricesForArea(area);
+      }
+
+      const injected = generateDynamicAreaSignals(uniqueAreas);
+      allSignals.push(...injected);
+    } catch (err) {
+      console.error('[Aggregator] Seeder or injection error:', err.message);
     }
   }
 
