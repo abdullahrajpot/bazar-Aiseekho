@@ -6,7 +6,18 @@ require('dotenv').config({ path: path.join(__dirname, '../../.env') });
 const { MONITORED_ROUTES, KARACHI_CENTER, AREA_COORDINATES, normalizeAreaKey } = require('../lib/constants');
 const { db } = require('../lib/firebase-admin');
 const { fetchAllFreeSignals } = require('./freeSignals');
-const { fetchHgvRouteSummary, classifyRouteStatus, getApiKey, getExtraDelayMinutes } = require('../lib/openRouteService');
+const { fetchWhatsAppInboxSignals } = require('./whatsappIngest');
+const {
+  fetchHgvRouteSummary,
+  classifyRouteStatus,
+  getApiKey,
+  getExtraDelayMinutes,
+  fetchOsrmMonitoredRoutes,
+  sleep,
+} = require('../lib/openRouteService');
+
+let orsAuthFailed = false;
+let orsRateLimited = false;
 
 // Twitter/X — paid credits on many developer plans; optional
 const TWITTER_QUERY =
@@ -25,36 +36,62 @@ function scoreTweet(text) {
   return score;
 }
 
-async function fetchWeather() {
+async function getActiveAreaLabels() {
+  if (!db) return ['Surjani Town'];
+  try {
+    const usersSnap = await db.ref('users').once('value');
+    const users = usersSnap.val() || {};
+    const areas = new Set();
+    Object.values(users).forEach((u) => {
+      if (u?.area) areas.add(u.area);
+    });
+    if (areas.size === 0) areas.add('Surjani Town');
+    return Array.from(areas);
+  } catch {
+    return ['Surjani Town'];
+  }
+}
+
+async function fetchWeatherForAreas(activeAreaLabels) {
   const signals = [];
   if (!process.env.OPENWEATHER_API_KEY) return signals;
 
-  try {
-    const res = await axios.get('https://api.openweathermap.org/data/2.5/weather', {
-      params: {
-        lat: KARACHI_CENTER.lat,
-        lon: KARACHI_CENTER.lon,
-        appid: process.env.OPENWEATHER_API_KEY,
-        units: 'metric',
-      },
-      timeout: 12000,
-    });
+  const keys = new Set();
+  for (const label of activeAreaLabels) {
+    const areaKey = normalizeAreaKey(label);
+    if (keys.has(areaKey)) continue;
+    keys.add(areaKey);
+    const coord = AREA_COORDINATES[areaKey] || KARACHI_CENTER;
+    const cityName = label.split(' — ')[0].trim();
 
-    const data = res.data;
-    const rain1h = data.rain?.['1h'] || 0;
-    const windKmh = (data.wind?.speed || 0) * 3.6;
-    const condition = data.weather?.[0]?.main || 'unknown';
+    try {
+      const res = await axios.get('https://api.openweathermap.org/data/2.5/weather', {
+        params: {
+          lat: coord.latitude ?? coord.lat,
+          lon: coord.longitude ?? coord.lon,
+          appid: process.env.OPENWEATHER_API_KEY,
+          units: 'metric',
+        },
+        timeout: 12000,
+      });
 
-    signals.push({
-      source: 'weather',
-      text: `Karachi conditions: ${condition}, rain ${rain1h}mm/h, wind ${windKmh.toFixed(0)}km/h`,
-      rainMmPerHour: rain1h,
-      windSpeedKmh: windKmh,
-      timestamp: Date.now(),
-      score: rain1h > 40 || windKmh > 80 ? 5 : 0,
-    });
-  } catch (error) {
-    console.error('[Aggregator] Weather API Error:', error.message);
+      const data = res.data;
+      const rain1h = data.rain?.['1h'] || 0;
+      const windKmh = (data.wind?.speed || 0) * 3.6;
+      const condition = data.weather?.[0]?.main || 'unknown';
+
+      signals.push({
+        source: 'weather',
+        area: areaKey,
+        text: `${cityName}: ${condition}, rain ${rain1h}mm/h, wind ${windKmh.toFixed(0)}km/h`,
+        rainMmPerHour: rain1h,
+        windSpeedKmh: windKmh,
+        timestamp: Date.now(),
+        score: rain1h > 15 || windKmh > 60 ? 5 : rain1h > 5 ? 3 : 0,
+      });
+    } catch (error) {
+      console.error(`[Aggregator] Weather (${areaKey}):`, error.message);
+    }
   }
 
   return signals;
@@ -77,10 +114,27 @@ async function fetchTwitter() {
     for (const tweet of res.data?.data || []) {
       const score = scoreTweet(tweet.text);
       if (score >= 3) {
+        const text = tweet.text;
+        let area = null;
+        const cityKeys = Object.keys(AREA_COORDINATES);
+        const lower = text.toLowerCase();
+        for (const key of cityKeys) {
+          const spaced = key.replace(/_/g, ' ');
+          if (lower.includes(spaced) || lower.includes(key)) {
+            area = key;
+            break;
+          }
+        }
+        if (/\bg-?10\b/i.test(text) || /george town/i.test(text)) area = 'islamabad';
+        if (/surjani/i.test(text)) area = 'surjani';
+        if (/orangi/i.test(text)) area = 'orangi';
+        if (/faisalabad/i.test(text)) area = 'faisalabad';
+
         signals.push({
           source: 'twitter',
-          text: tweet.text,
+          text,
           tweetId: tweet.id,
+          area,
           timestamp: Date.now(),
           score,
         });
@@ -110,12 +164,26 @@ async function fetchOpenRouteServiceRoutes() {
   if (!getApiKey()) return signals;
   if (!db) return signals;
 
-  for (const route of MONITORED_ROUTES) {
+  for (let i = 0; i < MONITORED_ROUTES.length; i++) {
+    const route = MONITORED_ROUTES[i];
+    if (i > 0) await sleep(700);
     try {
       const summary = await fetchHgvRouteSummary(route.origin, route.destination);
       if (summary.error) {
         const isAuth = String(summary.error).includes('auth_failed');
-        console.warn(`[Aggregator] ORS ${route.id}:`, summary.error);
+        const is429 = String(summary.error).includes('429') || String(summary.error).includes('rate');
+        if (isAuth) orsAuthFailed = true;
+        if (is429) orsRateLimited = true;
+        if (isAuth && !global._orsAuthWarned) {
+          global._orsAuthWarned = true;
+          console.warn(
+            '[ORS] API key rejected (403). Using free OSRM routing. Fix OPENROUTESERVICE_API_KEY or set USE_OSRM_ONLY=1.'
+          );
+        }
+        if (is429 && !global._ors429Warned) {
+          global._ors429Warned = true;
+          console.warn('[ORS] Rate limit (429). Using OSRM for this cycle.');
+        }
         await db.ref(`supply_status/${route.id}`).update({
           route_name: route.name,
           road: route.road,
@@ -240,15 +308,28 @@ async function fetchHereMaps() {
   return signals;
 }
 
-/** Prefer OpenRouteService; fall back to HERE if ORS key missing */
+/** Prefer OSRM when key bad/rate-limited; else OpenRouteService for Karachi corridors */
 async function fetchRouteMapSignals() {
+  const useOsrm =
+    process.env.USE_OSRM_ONLY === '1' || orsAuthFailed || orsRateLimited || !getApiKey();
+
+  if (useOsrm && db) {
+    console.log('[Aggregator] Using OSRM (free) for Karachi monitored routes.');
+    return fetchOsrmMonitoredRoutes(MONITORED_ROUTES, db);
+  }
+
   if (getApiKey()) {
     console.log('[Aggregator] Using OpenRouteService (driving-hgv) for monitored routes.');
-    return fetchOpenRouteServiceRoutes();
+    const orsSignals = await fetchOpenRouteServiceRoutes();
+    if (orsAuthFailed || orsRateLimited) {
+      return fetchOsrmMonitoredRoutes(MONITORED_ROUTES, db);
+    }
+    return orsSignals;
   }
+
   const hereKey = process.env.HERE_API_KEY;
   if (!hereKey || hereKey.length < 8 || hereKey.includes('xyz789')) {
-    console.log('[Aggregator] No OPENROUTESERVICE_API_KEY or HERE_API_KEY — route map signals disabled.');
+    if (db) return fetchOsrmMonitoredRoutes(MONITORED_ROUTES, db);
     return [];
   }
   console.log('[Aggregator] Using HERE Maps for monitored routes.');
@@ -297,142 +378,33 @@ async function fetchNdma() {
   return signals;
 }
 
-async function seedShopsAndPricesForArea(areaKey) {
-  if (!db) return;
-  const areaNorm = normalizeAreaKey(areaKey);
-
-  try {
-    const pricesSnap = await db.ref(`prices/${areaNorm}`).once('value');
-    if (pricesSnap.exists()) return; // Already seeded!
-
-    console.log(`[Seeder] Seeding dynamic localized market data for newly registered area: ${areaNorm}`);
-
-    const coord = AREA_COORDINATES[areaNorm] || { latitude: 24.89, longitude: 67.04 };
-    const baselinePrices = {
-      atta_10kg: { normal: 980, crisis_max: 1150 },
-      chini_1kg: { normal: 120, crisis_max: 145 },
-      pyaz_1kg: { normal: 85, crisis_max: 110 },
-      doodh_1l: { normal: 180, crisis_max: 210 },
-      lpg_cylinder: { normal: 2800, crisis_max: 3200 },
-    };
-
-    const shops = [
-      { id: `shop_${areaNorm}_1`, name: 'Al-Madina Kiryana Store', reputation: 'fair', warningCount: 0, latOffset: 0.003, lngOffset: -0.002 },
-      { id: `shop_${areaNorm}_2`, name: 'Bismillah General & LPG Shop', reputation: 'flagged', warningCount: 2, latOffset: -0.002, lngOffset: 0.004 },
-      { id: `shop_${areaNorm}_3`, name: 'Karachi Wholesale Point', reputation: 'fair', warningCount: 0, latOffset: 0.001, lngOffset: 0.001 },
-    ];
-
-    for (const s of shops) {
-      await db.ref(`shops/${s.id}`).set({
-        name: s.name,
-        area: areaNorm,
-        reputation: s.reputation,
-        warningCount: s.warningCount,
-        warning_count: s.warningCount,
-        registeredAt: Date.now(),
-        location: {
-          lat: coord.latitude + s.latOffset,
-          lng: coord.longitude + s.lngOffset,
-        }
-      });
-    }
-
-    const items = Object.keys(baselinePrices);
-    for (const item of items) {
-      const base = baselinePrices[item];
-      await db.ref(`prices/${areaNorm}/${item}/fairPrice`).set(base.normal);
-
-      for (let i = 0; i < shops.length; i++) {
-        const s = shops[i];
-        let price = base.normal;
-        let verdict = 'fair';
-        let percentOver = 0;
-
-        if (s.reputation === 'flagged') {
-          price = Math.round(base.crisis_max * 1.3);
-          verdict = 'gouging';
-          percentOver = Math.round(((price - base.normal) / base.normal) * 100);
-        } else if (i === 2) {
-          price = Math.round(base.normal * 1.18);
-          verdict = 'high';
-          percentOver = Math.round(((price - base.normal) / base.normal) * 100);
-        }
-
-        await db.ref(`prices/${areaNorm}/${item}/reports/report_${item}_${s.id}`).set({
-          price,
-          shopId: s.id,
-          shopName: s.name,
-          verdict,
-          fairPrice: base.normal,
-          percentOver,
-          timestamp: Date.now() - 3600000 * i,
-          submittedBy: 'khareedar',
-        });
+/** Tag RSS/Reddit headlines with area when city name appears */
+function tagSignalsWithAreas(signals) {
+  const cityKeys = Object.keys(AREA_COORDINATES);
+  return signals.map((sig) => {
+    if (sig.area) return sig;
+    const text = (sig.text || '').toLowerCase();
+    for (const key of cityKeys) {
+      const spaced = key.replace(/_/g, ' ');
+      if (text.includes(spaced) || text.includes(key)) {
+        return { ...sig, area: key };
       }
     }
-  } catch (err) {
-    console.error(`[Seeder] Error seeding ${areaNorm}:`, err.message);
-  }
-}
-
-function generateDynamicAreaSignals(areas) {
-  const list = [];
-  const areaGoodsMap = {
-    surjani: { goods: ['atta', 'LPG'], road: 'M9', roadName: 'M9 — Surjani route', name: 'Surjani Town' },
-    orangi: { goods: ['milk', 'onion'], road: 'local', roadName: 'Orangi local routes', name: 'Orangi Town' },
-    lyari: { goods: ['sugar', 'atta'], road: 'N55', roadName: 'N55 — Alternate', name: 'Lyari' },
-    korangi: { goods: ['atta', 'milk'], road: 'SHP', roadName: 'Super Highway — Mandi', name: 'Korangi' },
-    clifton: { goods: ['sugar', 'LPG'], road: 'local', roadName: 'Clifton local bypass', name: 'Clifton' },
-    malir: { goods: ['atta', 'onion'], road: 'local', roadName: 'Malir transit lanes', name: 'Malir' },
-    lahore_johar_town: { goods: ['sugar', 'LPG'], road: 'local', roadName: 'Johar Town local routes', name: 'Lahore Johar Town' },
-    lahore_gulberg: { goods: ['atta', 'onion'], road: 'local', roadName: 'Gulberg local bypass', name: 'Lahore Gulberg' },
-  };
-
-  for (const rawArea of areas) {
-    const area = normalizeAreaKey(rawArea);
-    const info = areaGoodsMap[area] || { 
-      goods: ['atta', 'sugar'], 
-      road: 'local', 
-      roadName: `${rawArea} local routes`,
-      name: rawArea.charAt(0).toUpperCase() + rawArea.slice(1).replace(/_/g, ' ')
-    };
-
-    list.push({
-      source: 'twitter',
-      text: `[Twitter Intel] Heavy monsoon rains and localized waterlogging reported in ${info.name}. Heavy transport logistics halted. Supply trucks carrying ${info.goods.join(' and ')} are struggling to reach local retail points. High risk of commodity price escalation.`,
-      timestamp: Date.now() - 300000,
-      score: 8,
-      area: area,
-    });
-
-    list.push({
-      source: 'whatsapp',
-      text: `[WhatsApp Alerts] URGENT: Monsoonal cloudburst near ${info.roadName} corridor. Local traders report supply route is partially submerged. Transit speed is down 60%. Retailers warning about potential shortage of ${info.goods.join(' and ')} in the next 12 hours.`,
-      timestamp: Date.now() - 600000,
-      score: 7,
-      area: area,
-    });
-
-    list.push({
-      source: 'weather',
-      text: `Localized weather cell warning: Active rain bands over ${info.name} region showing 32mm/h precipitation. Flooding warning issued for sub-transit corridors.`,
-      rainMmPerHour: 32,
-      timestamp: Date.now() - 100000,
-      score: 5,
-      area: area,
-    });
-  }
-  return list;
+    return sig;
+  });
 }
 
 async function aggregateSignals() {
   console.log('[Aggregator] Fetching real-time signals...');
+  const activeAreaLabels = await getActiveAreaLabels();
+
   const sources = [
-    { name: 'weather', fn: fetchWeather },
+    { name: 'weather', fn: () => fetchWeatherForAreas(activeAreaLabels) },
     { name: 'twitter', fn: fetchTwitter },
+    { name: 'whatsapp', fn: fetchWhatsAppInboxSignals },
     { name: 'route_maps', fn: fetchRouteMapSignals },
     { name: 'ndma', fn: fetchNdma },
-    { name: 'free_feeds', fn: fetchAllFreeSignals },
+    { name: 'free_feeds', fn: () => fetchAllFreeSignals(activeAreaLabels) },
   ];
 
   const settled = await Promise.allSettled(sources.map((s) => s.fn()));
@@ -469,42 +441,25 @@ async function aggregateSignals() {
     }
   }
 
-  // Seeder and Localized Signal Injection
+  const tagged = tagSignalsWithAreas(allSignals);
+  tagged.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+
+  let globalRouteStatus = {};
   if (db) {
-    try {
-      const usersSnap = await db.ref('users').once('value');
-      const users = usersSnap.val() || {};
-      const activeAreas = Object.values(users).map(u => u.area).filter(Boolean);
-      const uniqueAreas = Array.from(new Set(activeAreas));
+    const globalSnap = await db.ref('supply_status').once('value');
+    globalRouteStatus = globalSnap.val() || {};
 
-      if (uniqueAreas.length === 0) {
-        uniqueAreas.push('surjani');
-      }
-
-      for (const area of uniqueAreas) {
-        await seedShopsAndPricesForArea(area);
-      }
-
-      const injected = generateDynamicAreaSignals(uniqueAreas);
-      allSignals.push(...injected);
-    } catch (err) {
-      console.error('[Aggregator] Seeder or injection error:', err.message);
-    }
-  }
-
-  allSignals.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-
-  if (db) {
     await db.ref('signals/latest').set({
-      signals: allSignals.slice(0, 50),
+      signals: tagged.slice(0, 50),
       sourceStatus,
+      activeAreas: activeAreaLabels.map(normalizeAreaKey),
       updatedAt: Date.now(),
-      count: allSignals.length,
+      count: tagged.length,
     });
   }
 
-  console.log(`[Aggregator] Found ${allSignals.length} active signals.`);
-  return allSignals;
+  console.log(`[Aggregator] Found ${tagged.length} active signals for ${activeAreaLabels.length} area(s).`);
+  return { signals: tagged, globalRouteStatus };
 }
 
 module.exports = { aggregateSignals };

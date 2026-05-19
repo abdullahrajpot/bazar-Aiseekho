@@ -46,6 +46,7 @@ const KhareedarTabs = () => (
     <Tab.Screen name="Home" component={KhareedarHome} options={{ tabBarIcon: ({color}) => <Icon name="home" size={24} color={color} /> }} />
     <Tab.Screen name="Khabar" component={Khabar} options={{ tabBarIcon: ({color}) => <Icon name="newspaper" size={24} color={color} /> }} />
     <Tab.Screen name="Report" component={Report} options={{ tabBarIcon: ({color}) => <Icon name="plus-box" size={24} color={color} /> }} />
+    <Tab.Screen name="Map" component={MapScreen} options={{ tabBarIcon: ({color}) => <Icon name="map" size={24} color={color} /> }} />
     <Tab.Screen name="Alerts" component={Alerts} options={{ tabBarIcon: ({color}) => <Icon name="bell" size={24} color={color} /> }} />
     <Tab.Screen name="Profile" component={Profile} options={{ tabBarIcon: ({color}) => <Icon name="account" size={24} color={color} /> }} />
   </Tab.Navigator>
@@ -55,6 +56,7 @@ const DukandarTabs = () => (
   <Tab.Navigator screenOptions={{ headerShown: false, tabBarActiveTintColor: COLORS.primary }}>
     <Tab.Screen name="Home" component={DukandarHome} options={{ tabBarIcon: ({color}) => <Icon name="store" size={24} color={color} /> }} />
     <Tab.Screen name="Prices" component={Prices} options={{ tabBarIcon: ({color}) => <Icon name="tag" size={24} color={color} /> }} />
+    <Tab.Screen name="Map" component={MapScreen} options={{ tabBarIcon: ({color}) => <Icon name="map" size={24} color={color} /> }} />
     <Tab.Screen name="Supply" component={Supply} options={{ tabBarIcon: ({color}) => <Icon name="truck" size={24} color={color} /> }} />
     <Tab.Screen name="Profile" component={Profile} options={{ tabBarIcon: ({color}) => <Icon name="account" size={24} color={color} /> }} />
   </Tab.Navigator>

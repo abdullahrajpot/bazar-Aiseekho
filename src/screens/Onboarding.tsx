@@ -5,6 +5,7 @@ import { ref, set } from 'firebase/database';
 import { db } from '../lib/firebase';
 import { useUserStore } from '../store/userStore';
 import { COLORS, AREAS } from '../lib/constants';
+import { normalizeAreaKey } from '../lib/area';
 
 const Onboarding = ({ navigation }: any) => {
   const { uid, setRoleInfo } = useUserStore();
@@ -28,9 +29,10 @@ const Onboarding = ({ navigation }: any) => {
       // If Dukandar, create a shop record
       if (role === 'dukandar') {
         shopId = `shop_${uid}_${Date.now()}`;
+        const areaKey = normalizeAreaKey(area);
         await set(ref(db, `shops/${shopId}`), {
           name: shopName,
-          area: area.toLowerCase().replace(' ', '_'),
+          area: areaKey,
           ownerUid: uid,
           reputation: 'fair',
           warningCount: 0,
@@ -38,16 +40,14 @@ const Onboarding = ({ navigation }: any) => {
         });
       }
 
-      // Update user record
-      const areaFormatted = area.toLowerCase().replace(' ', '_');
       await set(ref(db, `users/${uid}`), {
         role,
-        area: areaFormatted,
+        area,
         shopId: shopId || null,
         registeredAt: Date.now(),
       });
 
-      setRoleInfo(role, areaFormatted, shopId || undefined);
+      setRoleInfo(role, area, shopId || undefined);
 
       // Navigate to the main app layout
       navigation.replace('MainTabs');

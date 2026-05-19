@@ -1,6 +1,9 @@
 const supplyGraph = require('../data/supplyGraph.json');
 const { askJson, isConfigured } = require('../lib/groqClient');
 const { db } = require('../lib/firebase-admin');
+const { normalizeAreaKey } = require('../lib/constants');
+const { signalMatchesArea, isKarachiArea } = require('../lib/areaRoutes');
+const { inferStatusFromSignals } = require('../lib/openRouteService');
 
 function isRouteMapSignal(s) {
   return s && (s.source === 'here_maps' || s.source === 'ors_maps');
@@ -32,55 +35,88 @@ function sanitizeGroqBreak(result, signals) {
     if (!hasMapIssue) {
       result.break = false;
       result.reasoning =
-        'No flood evidence in live feeds — classification reset. Use conflict, security, or route data only.';
+        'No flood evidence in area feeds — status derived from live signals only.';
     }
   }
   return result;
 }
 
-function analyzeFromSignals(signals) {
-  const mapBlocked = signals.filter((s) => isRouteMapSignal(s) && s.status === 'blocked');
-  const mapPartial = signals.filter((s) => isRouteMapSignal(s) && s.status === 'partial');
+function analyzeFromAreaSignals(areaSignals, areaLabel) {
+  const areaKey = normalizeAreaKey(areaLabel);
+  const mapSignals = areaSignals.filter((s) => isRouteMapSignal(s));
 
-  if (mapBlocked.length === 0 && mapPartial.length === 0) {
+  if (isKarachiArea(areaKey) && mapSignals.length > 0) {
+    const mapBlocked = mapSignals.filter((s) => s.status === 'blocked');
+    const mapPartial = mapSignals.filter((s) => s.status === 'partial');
+    if (mapBlocked.length === 0 && mapPartial.length === 0) {
+      return {
+        break: false,
+        type: 'other',
+        road: 'none',
+        goods: [],
+        areas: [areaLabel],
+        severity: 0,
+        shortage_hours: 0,
+        confidence: 0.9,
+        reasoning: `No corridor blockage in live routing for ${areaLabel}.`,
+      };
+    }
+    const primary = mapBlocked[0] || mapPartial[0];
+    const road = primary.routeId?.includes('N55')
+      ? 'N55'
+      : primary.routeId?.includes('SHP')
+        ? 'SHP'
+        : primary.routeId?.includes('M9')
+          ? 'M9'
+          : 'local';
+    return {
+      break: true,
+      type: 'road_blocked',
+      road,
+      goods: ['atta', 'vegetables', 'LPG'],
+      areas: [areaLabel],
+      severity: mapBlocked.length > 0 ? 0.85 : 0.55,
+      shortage_hours: mapBlocked.length > 0 ? 6 : 3,
+      confidence: 0.88,
+      reasoning: primary.text || `Live routing: ${primary.routeName || road} is ${primary.status}.`,
+    };
+  }
+
+  const inferred = inferStatusFromSignals(
+    areaSignals.filter((s) => !isRouteMapSignal(s))
+  );
+
+  if (inferred.status === 'clear') {
     return {
       break: false,
       type: 'other',
       road: 'none',
       goods: [],
-      areas: [],
+      areas: [areaLabel],
       severity: 0,
       shortage_hours: 0,
-      confidence: 0.9,
-      reasoning: 'No route blockage from live routing data (OpenRouteService / HERE).',
+      confidence: 0.88,
+      reasoning: inferred.reasoning,
     };
   }
 
-  const primary = mapBlocked[0] || mapPartial[0];
-  const road = primary.routeId?.includes('N55')
-    ? 'N55'
-    : primary.routeId?.includes('SHP')
-      ? 'SHP'
-      : primary.routeId?.includes('M9')
-        ? 'M9'
-        : 'local';
-
   return {
     break: true,
-    type: 'road_blocked',
-    road,
-    goods: ['atta', 'vegetables', 'LPG'],
-    areas: ['Surjani', 'Orangi', 'Korangi'],
-    severity: mapBlocked.length > 0 ? 0.85 : 0.55,
-    shortage_hours: mapBlocked.length > 0 ? 6 : 3,
-    confidence: 0.88,
-    reasoning: primary.text || `Route ${primary.routeName} reported ${primary.status} by live routing.`,
+    type: inferred.status === 'blocked' ? 'road_blocked' : 'other',
+    road: 'local',
+    goods: ['atta', 'general'],
+    areas: [areaLabel],
+    severity: inferred.status === 'blocked' ? 0.8 : 0.55,
+    shortage_hours: 4,
+    confidence: 0.8,
+    reasoning: inferred.reasoning,
   };
 }
 
-async function persistBreakResult(breakResult, signals) {
+async function persistBreakResult(breakResult, signals, areaLabel) {
   if (!db) return;
 
+  const areaKey = areaLabel ? normalizeAreaKey(areaLabel) : null;
   const alternate = findAlternate(breakResult.road || 'M9');
   const status = breakResult.break
     ? breakResult.severity > 0.7
@@ -88,112 +124,134 @@ async function persistBreakResult(breakResult, signals) {
       : 'partial'
     : 'clear';
 
-  // Write 1: supply_status by road key (hook + prompt schema)
-  if (breakResult.road && breakResult.road !== 'none') {
-    await db.ref(`supply_status/${breakResult.road}`).set({
+  if (breakResult.road && breakResult.road !== 'none' && isKarachiArea(areaKey || 'surjani')) {
+    await db.ref(`supply_status/${breakResult.road}`).update({
       status,
       goodsAffected: breakResult.goods || [],
-      severity: breakResult.severity || 0,
+      severity: breakResult.severity,
       alternate,
       extraMinutes: breakResult.break ? 30 : 0,
       updatedAt: Date.now(),
       reasoning: breakResult.reasoning,
+      area: areaKey,
     });
-
     const routeId = roadToRouteId(breakResult.road);
     if (routeId) {
       await db.ref(`supply_status/${routeId}`).update({
         route_name: routeId.replace(/_/g, ' '),
         road: breakResult.road,
         status,
-        goodsAffected: breakResult.goods || [],
         alternate,
         extraMinutes: breakResult.break ? 30 : 0,
-        updatedAt: Date.now(),
         reasoning: breakResult.reasoning,
+        updatedAt: Date.now(),
         source: 'supply_break_detector',
       });
     }
   }
 
-  // Sync per-route signals from ORS/HERE
-  for (const sig of signals.filter((s) => isRouteMapSignal(s) && s.routeId)) {
-    await db.ref(`supply_status/${sig.routeId}`).update({
-      route_name: sig.routeName,
-      status: sig.status,
-      reasoning: breakResult.reasoning,
-      severity: breakResult.severity,
-      updatedAt: Date.now(),
-      source: 'openrouteservice',
-    });
+  if (areaKey && areaLabel && breakResult.break) {
+    const { getAreaRoutes } = require('../lib/areaRoutes');
+    const routes = getAreaRoutes(areaLabel);
+    const blockedId = roadToRouteId(breakResult.road);
+    const altId =
+      breakResult.road === 'M9'
+        ? roadToRouteId('N55')
+        : routes.find((r) => r.road === 'alt' || r.road === 'N55')?.id;
+
+    for (const route of routes) {
+      let routeStatus = 'clear';
+      let routeAlternate = null;
+      let extra = 0;
+      if (blockedId && route.id === blockedId) {
+        routeStatus = status;
+        routeAlternate = alternate;
+        extra = 30;
+      } else if (altId && route.id === altId) {
+        routeStatus = 'rerouted';
+        extra = 25;
+      }
+      await db.ref(`supply_status/${areaKey}_${route.id}`).update({
+        status: routeStatus,
+        reasoning:
+          route.id === blockedId
+            ? breakResult.reasoning
+            : route.id === altId
+              ? `Alternate route recommended — ${alternate}`
+              : 'Clear — monitoring',
+        alternate: routeAlternate,
+        extraMinutes: extra,
+        updatedAt: Date.now(),
+        source: 'supply_break_detector',
+      });
+    }
   }
 
-  // Write 2: agent log (only on status/reasoning change)
-  const lastLogSnap = await db.ref('agent_log').orderByChild('timestamp').limitToLast(1).once('value');
-  const lastLog = lastLogSnap.val() ? Object.values(lastLogSnap.val())[0] : null;
-  const targetAction = breakResult.break ? 'break_confirmed' : 'all_clear';
+  const detail = areaLabel
+    ? `[${areaLabel}] ${breakResult.reasoning}`
+    : breakResult.reasoning;
 
-  if (!lastLog || lastLog.detail !== breakResult.reasoning || lastLog.action !== targetAction) {
-    await db.ref('agent_log').push({
-      agent: 'supply_break_detector',
-      action: targetAction,
-      detail: breakResult.reasoning,
-      severity: breakResult.break ? 'critical' : 'info',
-      rawOutput: JSON.stringify(breakResult),
-      timestamp: Date.now(),
-    });
-  }
+  await db.ref('agent_log').push({
+    agent: 'supply_break_detector',
+    action: breakResult.break ? 'break_confirmed' : 'all_clear',
+    detail,
+    severity: breakResult.break ? 'critical' : 'info',
+    area: areaKey,
+    rawOutput: JSON.stringify(breakResult),
+    timestamp: Date.now(),
+  });
 
-  // Write 3: admin stats
   if (breakResult.break) {
     await db.ref('admin_stats/breaksDetected').transaction((n) => (n || 0) + 1);
   }
 }
 
-async function detectBreak(signals) {
+async function detectBreakForArea(areaSignals, areaLabel) {
   try {
     let result = null;
 
-    if (isConfigured && signals.length > 0) {
+    if (isConfigured && areaSignals.length > 0) {
       result = await askJson(
-        `You are Bazar's supply break detector for Pakistan informal markets.
-Do NOT assume flood unless signals mention it. Use ONLY the signals below.
+        `Supply break detector for area: ${areaLabel}. Use ONLY signals below — no invented floods.
 
 Signals:
-${JSON.stringify(signals, null, 2)}
+${JSON.stringify(areaSignals.slice(0, 20), null, 2)}
 
-Supply graph:
-${JSON.stringify(supplyGraph, null, 2)}
-
-Return ONLY valid JSON:
+Return ONLY JSON:
 {
   "break": false,
-  "type": "road_blocked | wholesale_shutdown | fuel_shortage | security_closure | other",
+  "type": "road_blocked | other",
   "road": "M9 | N55 | SHP | local | none",
   "goods": [],
-  "areas": [],
+  "areas": ["${areaLabel}"],
   "severity": 0,
   "shortage_hours": 0,
   "confidence": 0.9,
-  "reasoning": "One sentence citing which signal(s) you used"
+  "reasoning": "One sentence citing signal source names"
 }`
       );
     }
 
     if (!result) {
-      result = analyzeFromSignals(signals);
+      result = analyzeFromAreaSignals(areaSignals, areaLabel);
     } else {
-      result = sanitizeGroqBreak(result, signals);
+      result = sanitizeGroqBreak(result, areaSignals);
+      result.areas = [areaLabel];
     }
 
-    await persistBreakResult(result, signals);
+    await persistBreakResult(result, areaSignals, areaLabel);
     return result;
   } catch (error) {
     console.error('[SupplyBreak] Error:', error.message);
-    const fallback = analyzeFromSignals(signals);
-    await persistBreakResult(fallback, signals);
+    const fallback = analyzeFromAreaSignals(areaSignals, areaLabel);
+    await persistBreakResult(fallback, areaSignals, areaLabel);
     return fallback;
   }
 }
 
-module.exports = { detectBreak };
+/** Legacy: all signals — delegates to first active area or Karachi */
+async function detectBreak(signals) {
+  return detectBreakForArea(signals, 'Surjani Town');
+}
+
+module.exports = { detectBreak, detectBreakForArea };

@@ -21,7 +21,9 @@ import { ScreenHeader } from '../../components/ui/ScreenHeader';
 import { LoadingState } from '../../components/shared/LoadingState';
 import { EmptyState } from '../../components/shared/EmptyState';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { normalizeAreaKey } from '../../lib/area';
+import { normalizeAreaKey, getAreaSpecificRoutes, resolveRouteMeta } from '../../lib/area';
+import { useCrisisSituation } from '../../hooks/useCrisisSituation';
+import { CiroPanel } from '../../components/ciro/CiroPanel';
 
 const MapScreen = () => {
   const { area } = useUserStore();
@@ -29,22 +31,39 @@ const MapScreen = () => {
   const { routes, loading: supplyLoading } = useSupplyStatus();
   const { prices, loading: pricesLoading } = useMarketPrices(displayArea);
   const { shopsRecord, loading: shopsLoading } = useShops();
-  const { claims } = useTruthFeed(null);
-  const { signals } = useSignals();
+  const { claims } = useTruthFeed(displayArea);
+  const { signals } = useSignals(displayArea);
+  const { situation, simulation, mapRoutes } = useCrisisSituation(displayArea);
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<'routes' | 'gouging'>('routes');
 
   const gougingReports = prices.filter((p) => p.verdict === 'gouging');
 
+  const areaKey = normalizeAreaKey(displayArea);
+
   const localSignals = useMemo(() => {
     if (!displayArea) return [];
-    const areaKey = normalizeAreaKey(displayArea);
+    const city = displayArea.toLowerCase().split(' — ')[0];
     return (signals || []).filter((s) => {
-      const sourceMatches = s.source === 'twitter' || s.source === 'whatsapp';
-      const areaMatches = s.area === areaKey || s.text.toLowerCase().includes(areaKey.replace(/_/g, ' '));
-      return sourceMatches && areaMatches;
+      const text = (s.text || '').toLowerCase();
+      const social =
+        s.source === 'twitter' ||
+        s.source === 'whatsapp' ||
+        s.source === 'google_news' ||
+        s.source === 'reddit' ||
+        s.source === 'ndma';
+      if (!social) return false;
+      return (
+        s.area === areaKey ||
+        text.includes(areaKey.replace(/_/g, ' ')) ||
+        (city.length > 2 && text.includes(city))
+      );
     });
-  }, [signals, displayArea]);
+  }, [signals, displayArea, areaKey]);
+
+  const areaRoutes = useMemo(() => {
+    return getAreaSpecificRoutes(displayArea);
+  }, [displayArea]);
 
   const loading = supplyLoading || pricesLoading || shopsLoading;
 
@@ -65,10 +84,10 @@ const MapScreen = () => {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.containerFlex}>
       <ScreenHeader
         title="Crisis Map"
-        subtitle="Live routes · shop reputation · rumour hotspots"
+        subtitle={`${displayArea} · live routes · shops · agent scans`}
       />
 
       <View style={styles.tabs}>
@@ -86,25 +105,34 @@ const MapScreen = () => {
         </TouchableOpacity>
       </View>
 
+      <View style={styles.mapCard}>
+        <CrisisMapView
+          routes={routes}
+          shopsRecord={shopsRecord}
+          claims={claims}
+          selectedArea={displayArea}
+          height={360}
+          ciroMapRoutes={mapRoutes}
+        />
+      </View>
+
       {loading ? (
-        <LoadingState message="Map data load ho rahi hai..." />
+        <LoadingState message="Route analysis load ho rahi hai..." />
       ) : (
         <ScrollView
+          style={styles.listScroll}
           contentContainerStyle={styles.scroll}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           nestedScrollEnabled={Platform.OS === 'android'}
         >
-          <View style={styles.mapCard}>
-            <CrisisMapView
-              routes={routes}
-              shopsRecord={shopsRecord}
-              claims={claims}
-              selectedArea={displayArea}
-              signals={signals}
-            />
-          </View>
+          <CiroPanel
+            situation={situation}
+            simulation={simulation}
+            mapRoutes={mapRoutes}
+            areaLabel={displayArea}
+          />
 
-          {/* Twitter Scanned News & Alerts Widget */}
+          {/* Twitter / WhatsApp scanned feed */}
           <View style={styles.newsSection}>
             <View style={styles.newsHeader}>
               <Icon name="twitter" size={20} color="#1DA1F2" style={{ marginRight: 8 }} />
@@ -129,19 +157,21 @@ const MapScreen = () => {
               <View style={styles.newsCardItemEmpty}>
                 <Icon name="antenna" size={24} color={COLORS.primary} style={{ marginBottom: 6 }} />
                 <Text style={styles.newsEmptyText}>
-                  Bazar AI Telemetry Scanners Active. Scanned 12 local citizen reports. No active floods, road blocks, or transit strikes detected in {displayArea}.
+                  Agents scanned RSS, Reddit, and news for {displayArea}. No unusual corridor alerts in the last cycle.
                 </Text>
               </View>
             )}
           </View>
 
           {activeTab === 'routes' ? (
-            Object.keys(routes).length === 0 ? (
+            areaRoutes.length === 0 ? (
               <EmptyState message="No route data yet — start backend agents to poll OpenRouteService." />
             ) : (
-              Object.entries(routes).map(([routeId, route]) => {
-                const isBlocked = route.status === 'blocked' || route.status === 'disrupted';
-                const isPartial = route.status === 'partial' || route.status === 'rerouted';
+              areaRoutes.map((areaRoute) => {
+                const backendRoute = resolveRouteMeta(areaRoute, routes, areaKey);
+                const status = backendRoute.status || 'clear';
+                const isBlocked = status === 'blocked' || status === 'disrupted';
+                const isPartial = status === 'partial' || status === 'rerouted';
                 
                 const speed = isBlocked
                   ? '0 km/h (No Passage)'
@@ -161,13 +191,16 @@ const MapScreen = () => {
                     ? COLORS.warning
                     : COLORS.fair;
 
+                const reasoning = backendRoute.reasoning || (isBlocked ? `Bazar Telemetry identified active transit obstruction on ${areaRoute.road} route. Rerouting initialized.` : null);
+                const alternate = backendRoute.alternate || (isBlocked ? (areaRoute.road === 'M9' ? 'N55' : 'local') : null);
+
                 return (
-                  <View key={routeId} style={styles.listCard}>
+                  <View key={areaRoute.id} style={styles.listCard}>
                     <View style={styles.row}>
-                      <Icon name={isBlocked ? "road-variant-off" : "road-variant"} size={26} color={routeColor(route.status as string)} />
+                      <Icon name="road-variant" size={26} color={routeColor(status)} />
                       <View style={styles.flex}>
                         <View style={styles.cardHeaderRow}>
-                          <Text style={styles.cardTitle}>{route.route_name || routeId.replace(/_/g, ' ')}</Text>
+                          <Text style={styles.cardTitle}>{areaRoute.name}</Text>
                           <View style={[styles.badge, { backgroundColor: badgeColor }]}>
                             <Text style={styles.badgeText}>{badgeLabel}</Text>
                           </View>
@@ -180,26 +213,26 @@ const MapScreen = () => {
                           </View>
                           <View style={styles.metaRow}>
                             <Icon name="clock-outline" size={14} color={COLORS.gray} style={{ marginRight: 6 }} />
-                            <Text style={styles.metaVal}>Delay: +{route.extraMinutes ?? route.extra_minutes ?? 0} mins</Text>
+                            <Text style={styles.metaVal}>Delay: +{backendRoute.extraMinutes ?? backendRoute.extra_minutes ?? 0} mins</Text>
                           </View>
                         </View>
 
-                        {route.reasoning ? (
+                        {reasoning ? (
                           <View style={styles.reasoningBox}>
                             <Icon name="radar" size={16} color={COLORS.danger} style={{ marginRight: 6, marginTop: 2 }} />
                             <Text style={styles.reasoningText}>
                               <Text style={{ fontWeight: '700' }}>Scanned Cause: </Text>
-                              {route.reasoning}
+                              {reasoning}
                             </Text>
                           </View>
                         ) : null}
 
-                        {route.alternate ? (
+                        {alternate ? (
                           <View style={styles.altBox}>
                             <Icon name="directions-fork" size={16} color={COLORS.primary} style={{ marginRight: 6 }} />
                             <Text style={styles.altText}>
                               <Text style={{ fontWeight: '700' }}>Re-routing Recommendation: </Text>
-                              Use {route.alternate} bypass safely.
+                              Use {alternate === 'N55' ? 'N55 alternate bypass' : alternate} safely.
                             </Text>
                           </View>
                         ) : null}
@@ -229,6 +262,7 @@ const MapScreen = () => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
+  containerFlex: { flex: 1, backgroundColor: COLORS.background },
   tabs: {
     flexDirection: 'row',
     padding: SPACING.md,
@@ -245,12 +279,14 @@ const styles = StyleSheet.create({
   tabActive: { backgroundColor: COLORS.primary },
   tabText: { color: COLORS.textSecondary, fontWeight: '600' },
   tabTextActive: { color: COLORS.white },
-  scroll: { padding: SPACING.lg },
+  scroll: { padding: SPACING.lg, paddingBottom: 40 },
+  listScroll: { flex: 1 },
   mapCard: {
     backgroundColor: COLORS.surface,
     borderRadius: 12,
     padding: SPACING.sm,
-    marginBottom: SPACING.lg,
+    marginHorizontal: SPACING.lg,
+    marginBottom: SPACING.sm,
     borderWidth: 1,
     borderColor: COLORS.border,
     overflow: 'hidden',

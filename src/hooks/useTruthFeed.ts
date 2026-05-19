@@ -35,7 +35,7 @@ export const useTruthFeed = (area?: string | null) => {
 
       const list: TruthClaim[] = Object.entries(data)
         .map(([id, claim]: [string, any]) => ({ id, ...claim }))
-        .filter((c) => !areaKey || !c.area || c.area === areaKey)
+        .filter((c) => !areaKey || c.area === areaKey)
         .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
         .slice(0, 20);
 

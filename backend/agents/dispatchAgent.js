@@ -4,6 +4,7 @@ require('dotenv').config({ path: path.join(__dirname, '../../.env') });
 
 const META_TOKEN = process.env.whatsapp || process.env.WHATSAPP_TOKEN;
 const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_ID;
+let whatsappExpiredLogged = false;
 
 async function sendWhatsAppMessage(phone, text) {
   if (!META_TOKEN || !phone) {
@@ -32,7 +33,20 @@ async function sendWhatsAppMessage(phone, text) {
     console.log(`[Dispatch] WhatsApp sent to ${phone}`);
     return true;
   } catch (error) {
-    console.error('[Dispatch] WhatsApp error:', error.response?.data || error.message);
+    const data = error.response?.data?.error;
+    const expired =
+      data?.code === 190 ||
+      String(data?.message || '').includes('Session has expired');
+    if (expired) {
+      if (!whatsappExpiredLogged) {
+        whatsappExpiredLogged = true;
+        console.warn(
+          '[Dispatch] WhatsApp token expired — renew Meta token in .env (whatsapp / WHATSAPP_TOKEN). Push alerts still work via Expo.'
+        );
+      }
+    } else {
+      console.error('[Dispatch] WhatsApp error:', error.response?.data || error.message);
+    }
     return false;
   }
 }

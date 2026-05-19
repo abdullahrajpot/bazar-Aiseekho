@@ -1,6 +1,12 @@
 const { askJson, isConfigured } = require('../lib/groqClient');
+const { verifyClaimAgainstSignals } = require('../lib/signalVerifier');
+const { signalMatchesArea } = require('../lib/areaRoutes');
+const { normalizeAreaKey } = require('../lib/constants');
 
-async function detectRumours(claimText, verifiedSignals) {
+/**
+ * Verify a claim using ONLY area-scoped live signals. Groq is optional enrichment.
+ */
+async function detectRumours(claimText, allSignals, areaLabel = null) {
   if (!claimText?.trim()) {
     return {
       verdict: 'unverified',
@@ -12,54 +18,68 @@ async function detectRumours(claimText, verifiedSignals) {
     };
   }
 
-  if (!isConfigured || verifiedSignals.length === 0) {
+  const areaKey = areaLabel ? normalizeAreaKey(areaLabel) : null;
+  const areaSignals = areaKey
+    ? (allSignals || []).filter((s) => signalMatchesArea(s, areaKey, areaLabel))
+    : allSignals || [];
+
+  const evidenceResult = verifyClaimAgainstSignals(claimText, areaSignals);
+
+  if (!isConfigured || areaSignals.length < 2) {
     return {
-      verdict: 'unverified',
-      confidence: 0.4,
-      reason_urdu: 'ابھی لائیو ڈیٹا یا AI تصدیق دستیاب نہیں۔ براہ کرم انتظار کریں۔',
-      reason_english: 'Insufficient live data to verify this claim yet.',
-      counter_message_urdu: null,
-      push_notification: false,
+      verdict: evidenceResult.verdict,
+      confidence: evidenceResult.confidence,
+      reason_urdu: evidenceResult.reasonUrdu,
+      reason_english: evidenceResult.reasonEnglish,
+      counter_message_urdu: evidenceResult.counterMessageUrdu,
+      push_notification: evidenceResult.push_notification,
+      evidence: evidenceResult.evidence,
     };
   }
 
   try {
-    const result = await askJson(
-        `You are Bazar's truth verification engine for Pakistan crisis information.
+    const ai = await askJson(
+      `You are Bazar truth verification for Pakistan. Use ONLY these area-specific signals — do not invent floods or roads not mentioned.
 
-Do NOT assume flood unless signals mention flood. Crises may include conflict, road closure, prices, or supply.
-Only use the verified signals below.
+Area: ${areaLabel || areaKey || 'unknown'}
+Claim: "${claimText}"
 
-The claim (may be in Urdu, Roman Urdu, or English):
-"${claimText}"
+Area signals (only source of truth):
+${JSON.stringify(areaSignals.slice(0, 15), null, 2)}
 
-Verified real-time data we have right now:
-${JSON.stringify(verifiedSignals, null, 2)}
-
-Return ONLY valid JSON:
+Return ONLY JSON:
 {
   "verdict": "verified | false | unverified",
-  "confidence": 0.91,
-  "reason_urdu": "2 sentence Urdu explanation",
-  "reason_english": "Brief English explanation",
-  "counter_message_urdu": "Correction if false, else null",
+  "confidence": 0.0,
+  "reason_urdu": "must cite which signal source",
+  "reason_english": "must cite which signal",
+  "counter_message_urdu": "null or correction",
   "push_notification": true
 }`,
       500
     );
 
-    if (result) return result;
-  } catch (error) {
-    console.error('[RumourDetector] Groq error:', error.message);
+    if (ai?.verdict && ai.confidence >= 0.55) {
+      return {
+        ...ai,
+        reason_urdu: ai.reason_urdu || ai.reasonUrdu || evidenceResult.reasonUrdu,
+        reason_english: ai.reason_english || ai.reasonEnglish || evidenceResult.reasonEnglish,
+        counter_message_urdu:
+          ai.counter_message_urdu || ai.counterMessageUrdu || evidenceResult.counterMessageUrdu,
+      };
+    }
+  } catch (e) {
+    console.error('[RumourDetector] Groq skip:', e.message);
   }
 
   return {
-    verdict: 'unverified',
-    confidence: 0.3,
-    reason_urdu: 'تصدیق مکمل نہیں ہو سکی۔',
-    reason_english: 'Verification could not be completed.',
-    counter_message_urdu: null,
-    push_notification: false,
+    verdict: evidenceResult.verdict,
+    confidence: evidenceResult.confidence,
+    reason_urdu: evidenceResult.reasonUrdu,
+    reason_english: evidenceResult.reasonEnglish,
+    counter_message_urdu: evidenceResult.counterMessageUrdu,
+    push_notification: evidenceResult.push_notification,
+    evidence: evidenceResult.evidence,
   };
 }
 
