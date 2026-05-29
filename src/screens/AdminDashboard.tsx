@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { COLORS, SPACING } from '../lib/constants';
+import { SPACING } from '../lib/constants';
+import { THEME } from '../lib/theme';
 import { useAdminStats } from '../hooks/useAdminStats';
 import { useAgentLog } from '../hooks/useAgentLog';
 import { useSupplyStatus } from '../hooks/useSupplyStatus';
-import { ScreenHeader } from '../components/ui/ScreenHeader';
+import { DesignHeader } from '../components/ui/DesignHeader';
 import { CrisisTimeline } from '../components/admin/CrisisTimeline';
 import { ReadableAgentLog } from '../components/admin/ReadableAgentLog';
 
@@ -28,31 +29,34 @@ const AdminDashboard = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScreenHeader
-        title="Bazar Admin"
+      <DesignHeader
+        title="Admin · CIRO"
         subtitle="Live agent orchestration"
+        showLive={hasCrisis}
         right={
           <View style={[styles.pill, hasCrisis && styles.pillDanger]}>
-            <Text style={styles.pillText}>{hasCrisis ? 'Crisis Active' : 'Monitoring'}</Text>
+            <Text style={[styles.pillText, hasCrisis && styles.pillTextDanger]}>
+              {hasCrisis ? 'Crisis' : 'OK'}
+            </Text>
           </View>
         }
       />
 
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.statsRow}>
-          <StatCard label="Supply breaks" value={stats.breaksDetected || 0} color={COLORS.danger} />
-          <StatCard label="Routes rerouted" value={stats.routesRerouted || 0} color={COLORS.primary} />
+          <StatCard label="Supply breaks" value={stats.breaksDetected || 0} color={THEME.gouging} />
+          <StatCard label="Routes rerouted" value={stats.routesRerouted || 0} color={THEME.primary} />
         </View>
         <View style={styles.statsRow}>
-          <StatCard label="Rumours suppressed" value={stats.rumoursSuppressed || 0} color={COLORS.fair} />
-          <StatCard label="Gouging flagged" value={stats.gougingShopsFlagged || 0} color={COLORS.warning} />
+          <StatCard label="Rumours suppressed" value={stats.rumoursSuppressed || 0} color={THEME.fair} />
+          <StatCard label="Gouging flagged" value={stats.gougingShopsFlagged || 0} color={THEME.warning} />
         </View>
 
         <CrisisTimeline />
 
         <Text style={styles.sectionTitle}>Live agent log</Text>
         {loading ? (
-          <ActivityIndicator color={COLORS.primary} />
+          <ActivityIndicator color={THEME.primary} />
         ) : logs.length === 0 ? (
           <Text style={styles.empty}>No agent activity yet. Run the backend to start polling APIs.</Text>
         ) : (
@@ -71,35 +75,36 @@ const AdminDashboard = () => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background },
+  container: { flex: 1, backgroundColor: THEME.background },
   content: { padding: SPACING.lg, paddingBottom: 40 },
   statsRow: { flexDirection: 'row', gap: SPACING.md, marginBottom: SPACING.md },
   statCard: {
     flex: 1,
-    backgroundColor: COLORS.surface,
+    backgroundColor: THEME.surface,
     padding: SPACING.lg,
-    borderRadius: 10,
+    borderRadius: THEME.radiusCard,
     borderLeftWidth: 4,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    borderWidth: 0.5,
+    borderColor: THEME.outline,
   },
-  statLabel: { fontSize: 12, color: COLORS.textSecondary },
+  statLabel: { fontSize: 11, fontWeight: '600', color: THEME.onSurfaceVariant },
   statValue: { fontSize: 28, fontWeight: '700', marginTop: 4 },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
-    color: COLORS.textPrimary,
+    color: THEME.onSurface,
     marginVertical: SPACING.lg,
   },
-  empty: { color: COLORS.textSecondary, textAlign: 'center', padding: SPACING.xl },
+  empty: { color: THEME.onSurfaceVariant, textAlign: 'center', padding: SPACING.xl },
   pill: {
-    backgroundColor: '#E8F5EF',
+    backgroundColor: THEME.surfaceContainer,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
   },
-  pillDanger: { backgroundColor: '#FDE8E8' },
-  pillText: { fontSize: 11, fontWeight: '700', color: COLORS.primary },
+  pillDanger: { backgroundColor: THEME.errorContainer },
+  pillText: { fontSize: 11, fontWeight: '700', color: THEME.primary },
+  pillTextDanger: { color: THEME.error },
 });
 
 export default AdminDashboard;

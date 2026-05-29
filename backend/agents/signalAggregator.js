@@ -7,6 +7,7 @@ const { MONITORED_ROUTES, KARACHI_CENTER, AREA_COORDINATES, normalizeAreaKey } =
 const { db } = require('../lib/firebase-admin');
 const { fetchAllFreeSignals } = require('./freeSignals');
 const { fetchWhatsAppInboxSignals } = require('./whatsappIngest');
+const { fetchAllRSSSignals } = require('../lib/rssParser');
 const {
   fetchHgvRouteSummary,
   classifyRouteStatus,
@@ -378,6 +379,28 @@ async function fetchNdma() {
   return signals;
 }
 
+async function fetchUserCrisisReports() {
+  if (!db) return [];
+  try {
+    const snap = await db.ref('user_crisis_reports').limitToLast(25).once('value');
+    const data = snap.val() || {};
+    const cutoff = Date.now() - 60 * 60 * 1000;
+    return Object.values(data)
+      .filter((r) => (r.timestamp || 0) >= cutoff)
+      .map((r) => ({
+        source: 'user_report',
+        text: r.text,
+        area: r.area ? normalizeAreaKey(r.area) : null,
+        score: r.hasImage ? 6 : 4,
+        crisisTypes: r.crisisTypes || [],
+        timestamp: r.timestamp,
+        incidentId: r.incidentId,
+      }));
+  } catch {
+    return [];
+  }
+}
+
 /** Tag RSS/Reddit headlines with area when city name appears */
 function tagSignalsWithAreas(signals) {
   const cityKeys = Object.keys(AREA_COORDINATES);
@@ -394,14 +417,20 @@ function tagSignalsWithAreas(signals) {
   });
 }
 
+let lastAggLogAt = 0;
+let ndmaWarned = false;
+
 async function aggregateSignals() {
-  console.log('[Aggregator] Fetching real-time signals...');
+  const quiet = process.env.AGGREGATOR_QUIET === '1';
+  if (!quiet) console.log('[Aggregator] Fetching real-time signals...');
   const activeAreaLabels = await getActiveAreaLabels();
 
   const sources = [
     { name: 'weather', fn: () => fetchWeatherForAreas(activeAreaLabels) },
     { name: 'twitter', fn: fetchTwitter },
     { name: 'whatsapp', fn: fetchWhatsAppInboxSignals },
+    { name: 'rss', fn: fetchAllRSSSignals },
+    { name: 'user_reports', fn: fetchUserCrisisReports },
     { name: 'route_maps', fn: fetchRouteMapSignals },
     { name: 'ndma', fn: fetchNdma },
     { name: 'free_feeds', fn: () => fetchAllFreeSignals(activeAreaLabels) },
@@ -421,7 +450,11 @@ async function aggregateSignals() {
     } else {
       const msg = result.reason?.message || String(result.reason);
       sourceStatus[name] = { ok: false, error: msg };
-      console.error(`[Aggregator] ${name} failed:`, msg);
+      if (!quiet && name !== 'ndma') console.error(`[Aggregator] ${name} failed:`, msg);
+      if (name === 'ndma' && !ndmaWarned) {
+        ndmaWarned = true;
+        if (!quiet) console.warn('[Aggregator] NDMA RSS unavailable — using Dawn/ARY/Geo/BBC + Google News.');
+      }
       
       if (db) {
         const lastLogSnap = await db.ref('agent_log').orderByChild('timestamp').limitToLast(3).once('value');
@@ -458,7 +491,11 @@ async function aggregateSignals() {
     });
   }
 
-  console.log(`[Aggregator] Found ${tagged.length} active signals for ${activeAreaLabels.length} area(s).`);
+  const now = Date.now();
+  if (!quiet && now - lastAggLogAt > 120000) {
+    lastAggLogAt = now;
+    console.log(`[Aggregator] ${tagged.length} signals · ${activeAreaLabels.length} area(s).`);
+  }
   return { signals: tagged, globalRouteStatus };
 }
 

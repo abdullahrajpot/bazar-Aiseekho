@@ -1,0 +1,36 @@
+{
+  "rules": {
+    ".read": true,
+    ".write": true,
+
+    "crisis_events": {
+      ".indexOn": ["detectedAt", "status", "areaKey"]
+    },
+    "action_log": {
+      ".indexOn": ["timestamp", "crisisId", "agent"]
+    },
+    "agent_log": {
+      ".indexOn": ["timestamp", "agent", "severity"]
+    },
+    "truth_feed": {
+      ".indexOn": ["timestamp", "area"]
+    },
+    "user_crisis_reports": {
+      ".indexOn": ["timestamp", "area"]
+    },
+    "incident_reports": {
+      ".indexOn": ["timestamp"]
+    },
+    "emergency_tickets": {
+      ".indexOn": ["createdAt"]
+    },
+    "emergency_dispatches": {
+      ".indexOn": ["createdAt"]
+    },
+    "signals": {
+      "latest": {
+        ".indexOn": ["updatedAt"]
+      }
+    }
+  }
+}

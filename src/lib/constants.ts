@@ -1,25 +1,28 @@
+import { THEME } from './theme';
+
+/** @deprecated Prefer THEME — kept for gradual migration */
 export const COLORS = {
-  primary: '#1D6E4E',
+  primary: THEME.primary,
   primaryDark: '#155A40',
   accent: '#E8A020',
-  danger: '#C53030',
-  fair: '#1D9E75',
-  high: '#BA7517',
-  gouging: '#E24B4A',
-  verified: '#1D9E75',
-  false: '#E24B4A',
-  unverified: '#BA7517',
-  background: '#F7F8FA',
-  surface: '#FFFFFF',
-  border: '#E2E6EA',
-  textPrimary: '#1A1F2E',
-  textSecondary: '#5A6370',
+  danger: THEME.error,
+  fair: THEME.fair,
+  high: THEME.warning,
+  gouging: THEME.gouging,
+  verified: THEME.fair,
+  false: THEME.gouging,
+  unverified: THEME.warning,
+  background: THEME.background,
+  surface: THEME.surface,
+  border: THEME.outline,
+  textPrimary: THEME.onSurface,
+  textSecondary: THEME.onSurfaceVariant,
   textTertiary: '#9AA3AE',
   white: '#FFFFFF',
   gray: '#6B7280',
-  lightGray: '#E5E7EB',
-  secondary: '#1D9E75',
-  warning: '#BA7517',
+  lightGray: THEME.outline,
+  secondary: THEME.secondary,
+  warning: THEME.warning,
 };
 
 export const SPACING = { xs: 4, sm: 8, md: 12, lg: 16, xl: 20, xxl: 24 };
@@ -96,7 +99,7 @@ export const MONITORED_ROUTES = [
   },
 ];
 
-export const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3000';
+export { BACKEND_URL } from './backendUrl';
 
 export const BASELINE_PRICES: Record<string, { normal: number; crisis_max?: number }> = {
   atta_10kg: { normal: 980, crisis_max: 1150 },

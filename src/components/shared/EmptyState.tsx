@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { COLORS } from '../../lib/constants';
+import { THEME } from '../../lib/theme';
 
 export function EmptyState({ message }: { message: string }) {
   return (
@@ -12,5 +12,5 @@ export function EmptyState({ message }: { message: string }) {
 
 const styles = StyleSheet.create({
   wrap: { padding: 32, alignItems: 'center' },
-  text: { fontSize: 14, color: COLORS.textSecondary, textAlign: 'center' },
+  text: { fontSize: 14, color: THEME.onSurfaceVariant, textAlign: 'center', lineHeight: 22 },
 });

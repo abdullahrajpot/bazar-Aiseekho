@@ -12,6 +12,22 @@ const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 
 let lastFallbackLogAt = 0;
 let lastRateLimitLogAt = 0;
+let groqCallsThisMinute = 0;
+let groqMinuteStart = Date.now();
+let groqPausedUntil = 0;
+
+function canCallGroq() {
+  if (process.env.CIRO_USE_GROQ === '0') return false;
+  const now = Date.now();
+  if (now < groqPausedUntil) return false;
+  if (now - groqMinuteStart > 60000) {
+    groqMinuteStart = now;
+    groqCallsThisMinute = 0;
+  }
+  if (groqCallsThisMinute >= 5) return false;
+  groqCallsThisMinute += 1;
+  return true;
+}
 
 // Autonomous Self-Healing Agent Model Simulator
 function generateSelfHealingFallback(prompt) {
@@ -100,7 +116,11 @@ async function askJson(prompt, maxTokens = 600) {
 
   if (!isConfigured) {
     if (skipFallback) return null;
-    console.warn('[Groq] GROQ_API_KEY not set — using local resilient fallback agent.');
+    return generateSelfHealingFallback(prompt);
+  }
+
+  if (!canCallGroq()) {
+    if (skipFallback) return null;
     return generateSelfHealingFallback(prompt);
   }
 
@@ -132,15 +152,18 @@ async function askJson(prompt, maxTokens = 600) {
     return JSON.parse(text.slice(jsonStart, jsonEnd + 1));
   } catch (error) {
     const isRateLimit = error.response?.status === 429 || JSON.stringify(error.response?.data || {}).includes('rate_limit');
+    const now = Date.now();
     if (isRateLimit) {
-      const now = Date.now();
-      if (now - lastRateLimitLogAt > 120000) {
+      groqPausedUntil = now + 5 * 60 * 1000;
+      if (now - lastRateLimitLogAt > 300000) {
         lastRateLimitLogAt = now;
-        console.warn('[Groq] Rate limit — using local rule-based agent for this cycle.');
+        console.warn('[Groq] Rate limit — rule-based agents for 5 min (set CIRO_USE_GROQ=0 to silence).');
       }
-    } else {
-      const detail = error.response?.data || error.message;
-      console.error('[Groq] API error:', typeof detail === 'object' ? JSON.stringify(detail) : detail);
+    } else if (now - lastRateLimitLogAt > 60000) {
+      const detail = error.response?.data?.error?.message || error.message;
+      if (detail && !String(detail).includes('rate_limit')) {
+        console.error('[Groq] API error:', detail);
+      }
     }
     
     if (skipFallback) return null;
@@ -148,4 +171,49 @@ async function askJson(prompt, maxTokens = 600) {
   }
 }
 
-module.exports = { askJson, isConfigured, MODEL };
+const VISION_MODEL = process.env.GROQ_VISION_MODEL || 'llama-3.2-11b-vision-preview';
+
+async function askVisionJson(prompt, imageBase64, mimeType = 'image/jpeg', maxTokens = 700) {
+  if (!isConfigured || !imageBase64) return null;
+
+  try {
+    const response = await axios.post(
+      GROQ_URL,
+      {
+        model: VISION_MODEL,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: prompt },
+              {
+                type: 'image_url',
+                image_url: { url: `data:${mimeType};base64,${imageBase64}` },
+              },
+            ],
+          },
+        ],
+        max_tokens: maxTokens,
+        temperature: 0.15,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        timeout: 60000,
+      }
+    );
+
+    const text = (response.data?.choices?.[0]?.message?.content || '').trim();
+    const jsonStart = text.indexOf('{');
+    const jsonEnd = text.lastIndexOf('}');
+    if (jsonStart === -1 || jsonEnd === -1) return null;
+    return JSON.parse(text.slice(jsonStart, jsonEnd + 1));
+  } catch (error) {
+    console.error('[Groq Vision] Error:', error.response?.data?.error?.message || error.message);
+    return null;
+  }
+}
+
+module.exports = { askJson, askVisionJson, isConfigured, MODEL, VISION_MODEL };

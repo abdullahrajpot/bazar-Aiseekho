@@ -3,6 +3,8 @@ const { XMLParser } = require('fast-xml-parser');
 const { normalizeAreaKey, AREA_COORDINATES } = require('../lib/constants');
 
 const REDDIT_UA = process.env.REDDIT_USER_AGENT || 'BazarCrisisIntel/1.0 (education; no-contact)';
+let redditDisabled = false;
+let redditWarned = false;
 
 const CITY_SEARCH_NAMES = {
   surjani: 'Surjani Karachi',
@@ -28,6 +30,7 @@ function scoreHeadline(text) {
   if (t.includes('shortage') || t.includes('supply') || t.includes('mandi') || t.includes('atta')) score += 2;
   if (t.includes('price') || t.includes('inflation') || t.includes('fuel') || t.includes('mehenga')) score += 2;
   if (t.includes('flood') || t.includes('rain') || t.includes('سیلاب')) score += 2;
+  if (t.includes('earthquake') || t.includes('زلزلہ') || t.includes('tremor')) score += 4;
   if (t.includes('conflict') || t.includes('security') || t.includes('border')) score += 2;
   return score;
 }
@@ -94,6 +97,7 @@ async function fetchGoogleNewsRss(activeAreaLabels = []) {
 }
 
 async function fetchRedditForAreas(activeAreaLabels = []) {
+  if (redditDisabled || process.env.SKIP_REDDIT === '1') return [];
   const signals = [];
   const subs = ['pakistan'];
   const citySubs = { faisalabad: 'Faisalabad', lahore_gulberg: 'Lahore', peshawar: 'Peshawar' };
@@ -141,7 +145,12 @@ async function fetchRedditForAreas(activeAreaLabels = []) {
       }
     }
   } catch (e) {
-    console.error('[FreeSignals] Reddit:', e.response?.status || e.message);
+    const status = e.response?.status;
+    if (status === 403 || status === 429) redditDisabled = true;
+    if (!redditWarned) {
+      redditWarned = true;
+      console.warn(`[FreeSignals] Reddit skipped (${status || e.message}) — using Google News + RSS only.`);
+    }
   }
 
   return dedupeByText(signals);

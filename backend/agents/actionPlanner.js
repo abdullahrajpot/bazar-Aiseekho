@@ -76,6 +76,24 @@ function defaultPlan(detection, areaLabel) {
         }
       );
       break;
+    case 'earthquake':
+      actions.push(
+        {
+          id: 'safety_alert',
+          type: 'alert',
+          priority: 'critical',
+          description: 'Earthquake safety alert — avoid damaged buildings',
+          descriptionUrdu: 'زلزلہ الرٹ — نقصان زدہ عمارتوں سے دور رہیں',
+        },
+        {
+          id: 'dispatch_emergency',
+          type: 'dispatch',
+          priority: 'critical',
+          description: 'Notify Rescue 1122 and district administration',
+          descriptionUrdu: 'ریسکیو 1122 اور انتظامیہ کو مطلع کریں',
+        }
+      );
+      break;
     case 'heatwave':
       actions.push(
         {
@@ -130,7 +148,7 @@ function defaultPlan(detection, areaLabel) {
 async function planActions(detection, areaLabel) {
   let plan = defaultPlan(detection, areaLabel);
 
-  if (isConfigured && detection.active) {
+  if (isConfigured && detection.active && process.env.CIRO_USE_GROQ !== '0') {
     try {
       const ai = await askJson(
         `CIRO action planner. Crisis: ${JSON.stringify(detection)}

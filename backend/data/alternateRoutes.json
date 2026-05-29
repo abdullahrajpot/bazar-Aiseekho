@@ -1,0 +1,12 @@
+{
+  "Islamabad": [
+    { "id": "margalla_road", "name": "Margalla Road", "avoids": "G10_main", "extraMinutes": 12, "suitableFor": ["all"] },
+    { "id": "zero_point", "name": "Zero Point bypass", "avoids": "G10_main", "extraMinutes": 20, "suitableFor": ["all"] }
+  ],
+  "Surjani Town": [
+    { "id": "N55_bypass", "name": "N55 Highway bypass", "avoids": "M9", "extraMinutes": 30, "suitableFor": ["trucks", "cars"] }
+  ],
+  "default": [
+    { "id": "ring_road", "name": "Ring Road / alternate corridor", "avoids": "main", "extraMinutes": 25, "suitableFor": ["all"] }
+  ]
+}

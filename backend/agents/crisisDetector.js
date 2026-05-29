@@ -13,6 +13,8 @@ const HEAT_RE = /\b(heatwave|heat wave|گرمی|lahar|temperature record|scorchi
 const BLOCK_RE =
   /\b(block|blocked|band|بند|closure|gridlock|congestion|traffic jam|phansi|phans)\b/i;
 const ACCIDENT_RE = /\b(accident|collision|crash|حادثہ|pile.?up)\b/i;
+const EARTHQUAKE_RE =
+  /\b(earthquake|earth quake|زلزلہ|زلزلے|tremor|seismic|richter|magnitude\s*[0-9])\b/i;
 const INFRA_RE = /\b(power outage|load shedding|بجلی|gas leak|pipeline|bridge collapse|infrastructure)\b/i;
 
 const CRISIS_TYPES = {
@@ -20,6 +22,7 @@ const CRISIS_TYPES = {
   heatwave: { label: 'Heatwave', labelUrdu: 'شدید گرمی کی لہر' },
   road_blockage: { label: 'Road blockage', labelUrdu: 'سڑک بند' },
   accident: { label: 'Traffic accident', labelUrdu: 'ٹریفک حادثہ' },
+  earthquake: { label: 'Earthquake', labelUrdu: 'زلزلہ' },
   infrastructure_failure: { label: 'Infrastructure failure', labelUrdu: 'انفراسٹرکچر خرابی' },
   supply_disruption: { label: 'Supply disruption', labelUrdu: 'سپلائی میں رکاوٹ' },
   none: { label: 'Monitoring — no active crisis', labelUrdu: 'نگرانی — کوئی بحران نہیں' },
@@ -49,7 +52,11 @@ function classifyFromSignals(areaSignals) {
   let confidence = 0.35;
   const impacts = [];
 
-  if (FLOOD_RE.test(texts) || rain >= 12) {
+  if (EARTHQUAKE_RE.test(texts)) {
+    type = 'earthquake';
+    confidence = 0.9;
+    impacts.push('Structural damage risk', 'Aftershock monitoring', 'Emergency shelters on standby');
+  } else if (FLOOD_RE.test(texts) || rain >= 12) {
     type = 'urban_flooding';
     confidence = rain >= 20 ? 0.92 : FLOOD_RE.test(texts) ? 0.88 : 0.75;
     impacts.push('Water accumulation on roads', 'Vehicles stranded', 'Market access limited');
@@ -115,7 +122,13 @@ async function detectCrisis(areaLabel, allSignals) {
 
   let detection = classifyFromSignals(areaSignals);
 
-  if (isConfigured && areaSignals.length >= 2 && detection.active) {
+  const useGroq =
+    isConfigured &&
+    process.env.CIRO_USE_GROQ !== '0' &&
+    detection.active &&
+    detection.confidence < 0.82;
+
+  if (useGroq && areaSignals.length >= 2) {
     try {
       const ai = await askJson(
         `CIRO crisis detector for Pakistan. Area: ${areaLabel}
@@ -126,7 +139,7 @@ ${JSON.stringify(areaSignals.slice(0, 18), null, 2)}
 
 Return ONLY JSON:
 {
-  "situationType": "urban_flooding | heatwave | road_blockage | accident | infrastructure_failure | supply_disruption | none",
+  "situationType": "urban_flooding | heatwave | road_blockage | accident | earthquake | infrastructure_failure | supply_disruption | none",
   "confidence": 0.0,
   "severity": "critical | high | medium | low",
   "impacts": ["..."],
@@ -167,4 +180,133 @@ Return ONLY JSON:
   return { ...detection, areaKey, areaLabel, signalCount: areaSignals.length };
 }
 
-module.exports = { detectCrisis, CRISIS_TYPES, classifyFromSignals };
+const { db } = require('../lib/firebase-admin');
+const { AREA_COORDINATES } = require('../lib/constants');
+
+function mapTypeToSchema(type) {
+  const m = {
+    urban_flooding: 'flood',
+    infrastructure_failure: 'infrastructure',
+    supply_disruption: 'road_blockage',
+    earthquake: 'earthquake',
+  };
+  return m[type] || type || 'road_blockage';
+}
+
+function coordsForLocation(location, areaKey) {
+  if (AREA_COORDINATES[areaKey]) {
+    const c = AREA_COORDINATES[areaKey];
+    return { lat: c.latitude, lng: c.longitude };
+  }
+  if (/g-?10/i.test(location || '')) return { lat: 33.6844, lng: 73.0479 };
+  return { lat: 24.89, lng: 67.04 };
+}
+
+/**
+ * Full hackathon schema — writes crisis_events/{crisisId}
+ */
+async function detectCrisisEvent(signals, inputText = null, areaLabel = null, extra = {}) {
+  const areaKey = areaLabel ? normalizeAreaKey(areaLabel) : null;
+  const pool = areaKey
+    ? (signals || []).filter((s) => signalMatchesArea(s, areaKey, areaLabel))
+    : signals || [];
+
+  if (inputText) {
+    pool.unshift({
+      source: 'user_report',
+      text: inputText,
+      score: 5,
+      timestamp: Date.now(),
+      area: areaKey,
+    });
+  }
+
+  if (extra.visionAnalysis) {
+    pool.unshift({
+      source: 'incident_photo',
+      text: extra.visionAnalysis.description_english || 'Photo incident',
+      score: 6,
+      timestamp: Date.now(),
+    });
+  }
+
+  const label = areaLabel || 'Pakistan';
+  const detection = await detectCrisis(label, pool.length ? pool : signals || []);
+
+  const crisisDetected =
+    detection.active ||
+    extra.visionAnalysis?.crisisDetected ||
+    (inputText && detection.confidence >= 0.5);
+
+  if (!crisisDetected || !db) {
+    return { crisisDetected: false };
+  }
+
+  const type = mapTypeToSchema(extra.visionAnalysis?.type || detection.situationType);
+  const location = detection.locationHint || label;
+  const locationCoords = extra.locationCoords || coordsForLocation(location, areaKey);
+
+  const existingAreaKey = areaKey || normalizeAreaKey(label);
+  const recentSnap = await db
+    .ref('crisis_events')
+    .orderByChild('detectedAt')
+    .limitToLast(15)
+    .once('value');
+  const recentData = recentSnap.val() || {};
+  const now = Date.now();
+  for (const [id, ev] of Object.entries(recentData)) {
+    if (ev.areaKey !== existingAreaKey) continue;
+    if (mapTypeToSchema(ev.type) !== type) continue;
+    if (now - (ev.detectedAt || 0) < 30 * 60 * 1000) {
+      return { crisisDetected: true, crisisId: id, ...ev, type: ev.type, location: ev.location, locationCoords: ev.locationCoords };
+    }
+  }
+
+  const crisisId = db.ref('crisis_events').push().key;
+  const event = {
+    type,
+    location,
+    locationCoords,
+    severity: detection.severity || 'high',
+    severityScore: detection.confidence,
+    confidence: detection.confidence,
+    confidenceReason: detection.explanationEnglish,
+    triggerSignals: pool.slice(0, 5).map((s) => (s.text || '').slice(0, 100)),
+    inputText: inputText || null,
+    imageUrl: extra.imageUrl || null,
+    detectedAt: Date.now(),
+    status: 'detected',
+    areaKey: existingAreaKey,
+  };
+
+  await db.ref(`crisis_events/${crisisId}`).set(event);
+
+  const { syncMapOverlayFromDetection } = require('../lib/mapOverlayWriter');
+  await syncMapOverlayFromDetection(label, detection, {
+    crisisId,
+    type: detection.situationType,
+    locationCoords,
+  });
+
+  await db.ref('action_log').push({
+    agent: 'crisis_detector',
+    crisisId,
+    action: 'crisis_confirmed',
+    detail: `${type} at ${location} — ${Math.round(detection.confidence * 100)}% confidence`,
+    severity: event.severity === 'critical' ? 'critical' : 'warning',
+    timestamp: Date.now(),
+  });
+
+  await db.ref('admin_stats/crisesDetected').transaction((n) => (n || 0) + 1);
+
+  return {
+    crisisDetected: true,
+    crisisId,
+    ...event,
+    type,
+    location,
+    locationCoords,
+  };
+}
+
+module.exports = { detectCrisis, detectCrisisEvent, CRISIS_TYPES, classifyFromSignals };

@@ -1,10 +1,21 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { auth } from '../lib/firebase';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { useUserStore } from '../store/userStore';
-import { COLORS } from '../lib/constants';
+import { THEME } from '../lib/theme';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
 const Signup = ({ navigation }: any) => {
@@ -16,26 +27,27 @@ const Signup = ({ navigation }: any) => {
 
   const handleSignup = async () => {
     if (!email || !password || !confirmPassword) {
-      Alert.alert('Missing Fields', 'Please fill in all fields.');
+      Alert.alert('Missing fields', 'Fill in all fields.');
       return;
     }
-
     if (password !== confirmPassword) {
-      Alert.alert('Password Mismatch', 'Passwords do not match.');
+      Alert.alert('Password mismatch', 'Passwords do not match.');
       return;
     }
 
     setLoading(true);
     try {
-      // NOTE: You MUST enable Email/Password authentication in your Firebase Console!
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       setUser(userCredential.user.uid);
       navigation.replace('Onboarding');
     } catch (error: any) {
       if (error.code === 'auth/configuration-not-found') {
-        Alert.alert('Configuration Error', 'Email/Password Authentication is NOT enabled in your Firebase Console. Please go to Firebase Console -> Authentication -> Sign-in method, and enable "Email/Password".');
+        Alert.alert(
+          'Firebase setup',
+          'Enable Email/Password in Firebase Console → Authentication → Sign-in method.'
+        );
       } else {
-        Alert.alert('Signup Failed', error.message);
+        Alert.alert('Signup failed', error.message);
       }
     } finally {
       setLoading(false);
@@ -45,20 +57,22 @@ const Signup = ({ navigation }: any) => {
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={styles.scroll}>
-          <View style={styles.header}>
-            <Text style={styles.title}>Create Account</Text>
-            <Text style={styles.subtitle}>Join Bazar today</Text>
+        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+          <View style={styles.logoCircle}>
+            <Text style={styles.logoLetter}>B</Text>
           </View>
+          <Text style={styles.title}>Join Bazar</Text>
+          <Text style={styles.urduTagline}>اکاؤنٹ بنائیں</Text>
+          <Text style={styles.taglineEn}>Citizen access to CIRO crisis intelligence</Text>
 
           <View style={styles.form}>
-            <Text style={styles.label}>Email Address</Text>
-            <View style={styles.inputContainer}>
-              <Icon name="email-outline" size={20} color={COLORS.gray} style={styles.inputIcon} />
+            <Text style={styles.label}>EMAIL</Text>
+            <View style={styles.inputWrap}>
+              <Icon name="email-outline" size={20} color={THEME.onSurfaceVariant} />
               <TextInput
                 style={styles.input}
-                placeholder="Enter your email"
-                placeholderTextColor={COLORS.gray}
+                placeholder="you@email.com"
+                placeholderTextColor={THEME.outlineVariant}
                 value={email}
                 onChangeText={setEmail}
                 autoCapitalize="none"
@@ -66,26 +80,26 @@ const Signup = ({ navigation }: any) => {
               />
             </View>
 
-            <Text style={styles.label}>Password</Text>
-            <View style={styles.inputContainer}>
-              <Icon name="lock-outline" size={20} color={COLORS.gray} style={styles.inputIcon} />
+            <Text style={styles.label}>PASSWORD</Text>
+            <View style={styles.inputWrap}>
+              <Icon name="lock-outline" size={20} color={THEME.onSurfaceVariant} />
               <TextInput
                 style={styles.input}
-                placeholder="Create a password"
-                placeholderTextColor={COLORS.gray}
+                placeholder="••••••••"
+                placeholderTextColor={THEME.outlineVariant}
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry
               />
             </View>
 
-            <Text style={styles.label}>Confirm Password</Text>
-            <View style={styles.inputContainer}>
-              <Icon name="lock-check-outline" size={20} color={COLORS.gray} style={styles.inputIcon} />
+            <Text style={styles.label}>CONFIRM PASSWORD</Text>
+            <View style={styles.inputWrap}>
+              <Icon name="lock-check-outline" size={20} color={THEME.onSurfaceVariant} />
               <TextInput
                 style={styles.input}
-                placeholder="Confirm your password"
-                placeholderTextColor={COLORS.gray}
+                placeholder="••••••••"
+                placeholderTextColor={THEME.outlineVariant}
                 value={confirmPassword}
                 onChangeText={setConfirmPassword}
                 secureTextEntry
@@ -93,20 +107,23 @@ const Signup = ({ navigation }: any) => {
             </View>
 
             {loading ? (
-              <ActivityIndicator size="large" color={COLORS.primary} style={styles.loader} />
+              <ActivityIndicator size="large" color={THEME.primary} style={{ marginTop: 16 }} />
             ) : (
-              <TouchableOpacity style={styles.button} onPress={handleSignup}>
-                <Text style={styles.buttonText}>Sign Up</Text>
-                <Icon name="account-plus" size={20} color={COLORS.white} />
+              <TouchableOpacity style={styles.primaryBtn} onPress={handleSignup}>
+                <Text style={styles.primaryBtnText}>Create account</Text>
+                <Icon name="account-plus" size={20} color={THEME.onPrimary} />
               </TouchableOpacity>
             )}
+          </View>
 
-            <View style={styles.footer}>
-              <Text style={styles.footerText}>Already have an account? </Text>
-              <TouchableOpacity onPress={() => navigation.goBack()}>
-                <Text style={styles.footerLink}>Sign In</Text>
-              </TouchableOpacity>
-            </View>
+          <TouchableOpacity style={styles.linkRow} onPress={() => navigation.goBack()}>
+            <Text style={styles.linkText}>Already have an account? </Text>
+            <Text style={styles.linkBold}>Sign in</Text>
+          </TouchableOpacity>
+
+          <View style={styles.footer}>
+            <Icon name="shield-check" size={14} color={THEME.onSurfaceVariant} />
+            <Text style={styles.footerMeta}>Secured by CIRO Intelligence Engine</Text>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -115,95 +132,68 @@ const Signup = ({ navigation }: any) => {
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  scroll: {
-    flexGrow: 1,
-    padding: 24,
+  container: { flex: 1, backgroundColor: THEME.background },
+  scroll: { flexGrow: 1, padding: 24, justifyContent: 'center', maxWidth: 440, alignSelf: 'center', width: '100%' },
+  logoCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: THEME.primary,
+    alignSelf: 'center',
     justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+    borderWidth: 0.5,
+    borderColor: THEME.outline,
   },
-  header: {
-    marginBottom: 40,
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#1F2937',
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: COLORS.gray,
-  },
-  form: {
-    width: '100%',
-  },
+  logoLetter: { fontSize: 32, fontWeight: '700', color: THEME.onPrimary },
+  title: { fontSize: 28, fontWeight: '700', color: THEME.primary, textAlign: 'center' },
+  urduTagline: { fontSize: 18, color: THEME.onSurfaceVariant, textAlign: 'center', marginTop: 8 },
+  taglineEn: { fontSize: 13, color: THEME.onSurfaceVariant, textAlign: 'center', marginTop: 4, marginBottom: 24 },
+  form: { width: '100%' },
   label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#374151',
-    marginBottom: 8,
-    marginLeft: 4,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    color: THEME.onSurfaceVariant,
+    marginBottom: 6,
+    marginTop: 8,
   },
-  inputContainer: {
+  inputWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.white,
-    borderWidth: 1,
-    borderColor: COLORS.lightGray,
+    gap: 10,
+    backgroundColor: THEME.surface,
+    borderWidth: 0.5,
+    borderColor: THEME.outline,
     borderRadius: 12,
-    marginBottom: 20,
-    paddingHorizontal: 16,
-    height: 56,
+    paddingHorizontal: 14,
+    height: 52,
+    marginBottom: 8,
   },
-  inputIcon: {
-    marginRight: 12,
-  },
-  input: {
-    flex: 1,
-    fontSize: 16,
-    color: '#000000', // Dark text color inside input
-    height: '100%',
-  },
-  button: {
-    backgroundColor: COLORS.primary,
-    height: 56,
+  input: { flex: 1, fontSize: 16, color: THEME.onSurface },
+  primaryBtn: {
+    backgroundColor: THEME.primaryContainer,
+    height: 52,
     borderRadius: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 8,
     marginTop: 12,
-    shadowColor: COLORS.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
   },
-  buttonText: {
-    color: COLORS.white,
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginRight: 8,
-  },
+  primaryBtnText: { color: THEME.onPrimary, fontSize: 16, fontWeight: '600' },
+  linkRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 28 },
+  linkText: { fontSize: 15, color: THEME.onSurfaceVariant },
+  linkBold: { fontSize: 15, fontWeight: '700', color: THEME.primary },
   footer: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'center',
+    gap: 6,
     marginTop: 32,
   },
-  footerText: {
-    color: COLORS.gray,
-    fontSize: 15,
-  },
-  footerLink: {
-    color: COLORS.primary,
-    fontSize: 15,
-    fontWeight: 'bold',
-  },
-  loader: {
-    marginTop: 20,
-  },
+  footerMeta: { fontSize: 12, color: THEME.onSurfaceVariant },
 });
 
 export default Signup;

@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { COLORS, BACKEND_URL } from '../../lib/constants';
+import { THEME } from '../../lib/theme';
+import { BACKEND_URL } from '../../lib/constants';
 import { useTruthFeed } from '../../hooks/useTruthFeed';
 import { useUserStore } from '../../store/userStore';
 import { TruthCard } from '../../components/TruthCard';
 import { LoadingState } from '../../components/shared/LoadingState';
 import { EmptyState } from '../../components/shared/EmptyState';
+import { DesignHeader } from '../../components/ui/DesignHeader';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
 const Khabar = () => {
@@ -27,10 +29,12 @@ const Khabar = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>سچ فیڈ | Truth Feed</Text>
-        <Text style={styles.subtitle}>AI verified news, Reddit & Google News scans</Text>
-      </View>
+      <DesignHeader
+        title="سچ فیڈ | Truth"
+        subtitle={`Rumour agent · ${displayArea}`}
+        showLive={claims.length > 0}
+        onRefresh={onRefresh}
+      />
 
       {loading ? (
         <LoadingState message="Truth feed load ho rahi hai..." />
@@ -40,14 +44,14 @@ const Khabar = () => {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         >
           <View style={styles.feedStatus}>
-            <Icon name="rss" size={20} color={COLORS.primary} style={{ marginRight: 8 }} />
+            <Icon name="rss" size={20} color={THEME.primary} />
             <Text style={styles.feedStatusText}>
-              Rumour agent polling free feeds every 2 min · {displayArea}
+              AI scans Reddit & news every 2 min · {claims.length} claims
             </Text>
           </View>
 
           {claims.length === 0 ? (
-            <EmptyState message="All clear. No active alerts or verified rumours in your area." />
+            <EmptyState message="All clear. No active rumours flagged for your area." />
           ) : (
             claims.map((claim) => (
               <TruthCard
@@ -72,44 +76,21 @@ const Khabar = () => {
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  header: {
-    padding: 20,
-    backgroundColor: COLORS.white,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.lightGray,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: COLORS.primary,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: COLORS.gray,
-    marginTop: 4,
-  },
+  container: { flex: 1, backgroundColor: THEME.background },
   feedStatus: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#E8F5EF',
-    paddingVertical: 10,
+    gap: 10,
+    backgroundColor: THEME.surfaceContainer,
+    paddingVertical: 12,
     paddingHorizontal: 14,
-    borderRadius: 8,
+    borderRadius: THEME.radiusCard,
     marginBottom: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: THEME.primary,
   },
-  feedStatusText: {
-    fontSize: 12,
-    color: COLORS.primary,
-    fontWeight: '600',
-    flex: 1,
-  },
-  scroll: {
-    padding: 16,
-  },
+  feedStatusText: { fontSize: 12, color: THEME.primary, fontWeight: '600', flex: 1 },
+  scroll: { padding: 16, paddingBottom: 32 },
 });
 
 export default Khabar;

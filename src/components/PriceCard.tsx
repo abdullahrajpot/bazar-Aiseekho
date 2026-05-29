@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { COLORS, SPACING } from '../lib/constants';
+import { THEME } from '../lib/theme';
 
 interface PriceCardProps {
   itemName: string;
@@ -22,12 +22,21 @@ export const PriceCard: React.FC<PriceCardProps> = ({
   verdict,
 }) => {
   const v = verdict || 'fair';
-  const borderColor =
-    v === 'gouging' ? COLORS.gouging : v === 'high' ? COLORS.high : COLORS.fair;
-  const bg = v === 'gouging' ? '#FFF5F5' : COLORS.surface;
+  const borderColor = v === 'gouging' ? THEME.gouging : v === 'high' ? THEME.warning : THEME.fair;
+  const bg = v === 'gouging' ? THEME.errorContainer : THEME.surface;
 
   return (
-    <View style={[styles.card, { borderLeftColor: borderColor, backgroundColor: bg }]}>
+    <View
+      style={[
+        styles.card,
+        {
+          borderLeftColor: borderColor,
+          backgroundColor: bg,
+          borderColor: v === 'gouging' ? THEME.gouging : v === 'high' ? THEME.warning : THEME.outline,
+          borderWidth: v === 'fair' ? 0.5 : 2,
+        },
+      ]}
+    >
       <View style={styles.row}>
         <View>
           <Text style={styles.itemName}>{itemName}</Text>
@@ -51,29 +60,31 @@ export const PriceCard: React.FC<PriceCardProps> = ({
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 10,
-    padding: SPACING.lg,
-    marginHorizontal: SPACING.lg,
-    marginBottom: SPACING.md,
+    borderRadius: THEME.radiusCard,
+    padding: 16,
+    marginBottom: 12,
     borderLeftWidth: 4,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    shadowColor: '#1A1F2E',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
   row: { flexDirection: 'row', justifyContent: 'space-between' },
-  itemName: { fontSize: 16, fontWeight: '700', color: COLORS.textPrimary },
-  itemUrdu: { fontSize: 14, color: COLORS.textSecondary, marginTop: 2 },
+  itemName: { fontSize: 16, fontWeight: '700', color: THEME.onSurface },
+  itemUrdu: { fontSize: 14, color: THEME.onSurfaceVariant, marginTop: 2 },
   priceCol: { alignItems: 'flex-end' },
-  price: { fontSize: 18, fontWeight: '800' },
-  fairStrike: { fontSize: 12, color: COLORS.textTertiary, textDecorationLine: 'line-through' },
+  price: { fontSize: 20, fontWeight: '800' },
+  fairStrike: { fontSize: 12, color: THEME.onSurfaceVariant, textDecorationLine: 'line-through' },
   footer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: SPACING.md,
-    paddingTop: SPACING.sm,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
+    marginTop: 12,
+    paddingTop: 10,
+    borderTopWidth: 0.5,
+    borderTopColor: THEME.outline,
   },
-  shop: { fontSize: 12, color: COLORS.textSecondary },
-  tag: { fontSize: 11, fontWeight: '700' },
-  reported: { fontSize: 10, color: COLORS.gouging, marginTop: 6 },
+  shop: { fontSize: 12, color: THEME.onSurfaceVariant },
+  tag: { fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
+  reported: { fontSize: 10, color: THEME.gouging, marginTop: 6 },
 });

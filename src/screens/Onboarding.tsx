@@ -1,55 +1,30 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Alert, TextInput, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Alert, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ref, set } from 'firebase/database';
 import { db } from '../lib/firebase';
 import { useUserStore } from '../store/userStore';
-import { COLORS, AREAS } from '../lib/constants';
-import { normalizeAreaKey } from '../lib/area';
+import { AREAS } from '../lib/constants';
+import { THEME } from '../lib/theme';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
 const Onboarding = ({ navigation }: any) => {
   const { uid, setRoleInfo } = useUserStore();
-  const [role, setRole] = useState<'khareedar' | 'dukandar' | 'admin' | null>(null);
+  const [role, setRole] = useState<'khareedar' | 'admin' | null>(null);
   const [area, setArea] = useState(AREAS[0]);
-  const [shopName, setShopName] = useState('');
 
   const handleComplete = async () => {
     if (!role) {
-      Alert.alert('Error', 'Please select a role');
+      Alert.alert('Select role', 'Choose Citizen or Admin');
       return;
     }
-    if (role === 'dukandar' && !shopName) {
-      Alert.alert('Error', 'Please enter your shop name');
-      return;
-    }
-
     try {
-      let shopId = null;
-
-      // If Dukandar, create a shop record
-      if (role === 'dukandar') {
-        shopId = `shop_${uid}_${Date.now()}`;
-        const areaKey = normalizeAreaKey(area);
-        await set(ref(db, `shops/${shopId}`), {
-          name: shopName,
-          area: areaKey,
-          ownerUid: uid,
-          reputation: 'fair',
-          warningCount: 0,
-          registeredAt: Date.now(),
-        });
-      }
-
       await set(ref(db, `users/${uid}`), {
         role,
         area,
-        shopId: shopId || null,
         registeredAt: Date.now(),
       });
-
-      setRoleInfo(role, area, shopId || undefined);
-
-      // Navigate to the main app layout
+      setRoleInfo(role, area);
       navigation.replace('MainTabs');
     } catch (error: any) {
       Alert.alert('Error', error.message);
@@ -59,111 +34,94 @@ const Onboarding = ({ navigation }: any) => {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <Text style={styles.title}>Welcome to Bazar</Text>
-        <Text style={styles.subtitle}>Who are you?</Text>
+        <View style={styles.hero}>
+          <Icon name="radar" size={40} color={THEME.primary} />
+          <Text style={styles.title}>Bazar + CIRO</Text>
+          <Text style={styles.subtitle}>Crisis intelligence for your city</Text>
+        </View>
 
         <TouchableOpacity
           style={[styles.card, role === 'khareedar' && styles.cardSelected]}
           onPress={() => setRole('khareedar')}
         >
-          <Text style={styles.cardTitle}>Khareedar (Consumer)</Text>
-          <Text style={styles.cardDesc}>I want to check prices and verify rumours</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.card, role === 'dukandar' && styles.cardSelected]}
-          onPress={() => setRole('dukandar')}
-        >
-          <Text style={styles.cardTitle}>Dukandar (Shopkeeper)</Text>
-          <Text style={styles.cardDesc}>I want to get supply alerts and set fair prices</Text>
+          <Icon name="account" size={28} color={THEME.primary} />
+          <Text style={styles.cardTitle}>Citizen</Text>
+          <Text style={styles.cardDesc}>Crisis map, alerts, report incidents, market truth</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
           style={[styles.card, role === 'admin' && styles.cardSelected]}
           onPress={() => setRole('admin')}
         >
-          <Text style={styles.cardTitle}>Admin / NDMA</Text>
-          <Text style={styles.cardDesc}>I am a system coordinator</Text>
+          <Icon name="shield-account" size={28} color={THEME.tertiary} />
+          <Text style={styles.cardTitle}>Admin / Command</Text>
+          <Text style={styles.cardDesc}>Crisis command centre, simulation, overrides</Text>
         </TouchableOpacity>
 
         {role && (
-          <View style={styles.detailsSection}>
-            <Text style={styles.label}>Select your area:</Text>
-            <View style={styles.areaGrid}>
-              {AREAS.map(a => (
+          <>
+            <Text style={styles.label}>Your area (for local alerts)</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              {AREAS.map((a) => (
                 <TouchableOpacity
                   key={a}
-                  style={[styles.areaChip, area === a && styles.areaChipSelected]}
+                  style={[styles.areaChip, area === a && styles.areaChipActive]}
                   onPress={() => setArea(a)}
                 >
-                  <Text style={[styles.areaText, area === a && styles.areaTextSelected]}>{a}</Text>
+                  <Text style={[styles.areaChipText, area === a && styles.areaChipTextActive]}>{a}</Text>
                 </TouchableOpacity>
               ))}
-            </View>
-
-            {role === 'dukandar' && (
-              <>
-                <Text style={[styles.label, { marginTop: 20 }]}>Shop Name:</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="e.g. Al-Noor Kiryana"
-                  value={shopName}
-                  onChangeText={setShopName}
-                />
-              </>
-            )}
-
-            <TouchableOpacity style={styles.submitBtn} onPress={handleComplete}>
-              <Text style={styles.submitBtnText}>Continue to App</Text>
-            </TouchableOpacity>
-          </View>
+            </ScrollView>
+          </>
         )}
+
+        <TouchableOpacity style={styles.button} onPress={handleComplete}>
+          <Text style={styles.buttonText}>Continue</Text>
+        </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background },
-  scroll: { padding: 20 },
-  title: { fontSize: 32, fontWeight: 'bold', color: COLORS.primary, marginBottom: 8 },
-  subtitle: { fontSize: 18, color: COLORS.gray, marginBottom: 24 },
+  container: { flex: 1, backgroundColor: THEME.background },
+  scroll: { padding: 24 },
+  hero: { alignItems: 'center', marginBottom: 28 },
+  title: { fontSize: 26, fontWeight: '700', color: THEME.primary, marginTop: 12 },
+  subtitle: { fontSize: 14, color: THEME.onSurfaceVariant, marginTop: 4 },
   card: {
-    backgroundColor: COLORS.white,
+    backgroundColor: THEME.surface,
     padding: 20,
-    borderRadius: 12,
-    marginBottom: 16,
-    borderWidth: 2,
-    borderColor: 'transparent',
-    elevation: 2,
+    borderRadius: 14,
+    marginBottom: 12,
+    borderWidth: 0.5,
+    borderColor: THEME.outline,
+    alignItems: 'center',
   },
-  cardSelected: {
-    borderColor: COLORS.primary,
-    backgroundColor: '#F0FDF4',
-  },
-  cardTitle: { fontSize: 18, fontWeight: 'bold', color: '#1F2937' },
-  cardDesc: { fontSize: 14, color: '#6B7280', marginTop: 4 },
-  detailsSection: { marginTop: 24 },
-  label: { fontSize: 16, fontWeight: 'bold', marginBottom: 12, color: '#374151' },
-  areaGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  cardSelected: { borderColor: THEME.primary, borderWidth: 2, backgroundColor: THEME.surfaceDim },
+  cardTitle: { fontSize: 18, fontWeight: '700', marginTop: 8 },
+  cardDesc: { fontSize: 13, color: THEME.onSurfaceVariant, textAlign: 'center', marginTop: 4 },
+  label: { fontSize: 14, fontWeight: '600', marginTop: 16, marginBottom: 8 },
   areaChip: {
-    paddingHorizontal: 12, paddingVertical: 8,
-    backgroundColor: COLORS.white, borderRadius: 20,
-    borderWidth: 1, borderColor: COLORS.lightGray,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 0.5,
+    borderColor: THEME.outline,
+    marginRight: 8,
+    backgroundColor: THEME.surface,
   },
-  areaChipSelected: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
-  areaText: { color: COLORS.gray },
-  areaTextSelected: { color: COLORS.white, fontWeight: 'bold' },
-  input: {
-    backgroundColor: COLORS.white, padding: 16,
-    borderRadius: 8, borderWidth: 1, borderColor: COLORS.lightGray,
-    color: '#000000',
+  areaChipActive: { backgroundColor: THEME.primary, borderColor: THEME.primary },
+  areaChipText: { fontSize: 13, color: THEME.onSurface },
+  areaChipTextActive: { color: THEME.onPrimary },
+  button: {
+    backgroundColor: THEME.primary,
+    padding: 16,
+    borderRadius: 10,
+    alignItems: 'center',
+    marginTop: 24,
   },
-  submitBtn: {
-    backgroundColor: COLORS.primary, padding: 16,
-    borderRadius: 8, alignItems: 'center', marginTop: 32,
-  },
-  submitBtnText: { color: COLORS.white, fontSize: 16, fontWeight: 'bold' },
+  buttonText: { color: THEME.onPrimary, fontWeight: '700', fontSize: 16 },
 });
 
 export default Onboarding;

@@ -1,0 +1,35 @@
+{
+  "default": {
+    "rescueUnits": [
+      { "name": "Rescue 1122", "phone": "1122", "type": "general_rescue", "available": true },
+      { "name": "Police Emergency", "phone": "15", "type": "police", "available": true },
+      { "name": "Ambulance / Edhi", "phone": "115", "type": "ambulance", "available": true },
+      { "name": "Fire Brigade", "phone": "16", "type": "fire", "available": true }
+    ],
+    "hospitals": [
+      { "name": "PIMS Hospital", "lat": 33.7175, "lng": 73.0629 },
+      { "name": "Jinnah Hospital Karachi", "lat": 24.8942, "lng": 67.0289 }
+    ]
+  },
+  "islamabad": {
+    "rescueUnits": [
+      { "name": "Rescue 1122 Islamabad", "phone": "1122", "type": "flood_rescue", "available": true },
+      { "name": "ICT Police", "phone": "15", "type": "police", "available": true }
+    ],
+    "hospitals": [
+      { "name": "PIMS", "lat": 33.7175, "lng": 73.0629 },
+      { "name": "Poly Clinic", "lat": 33.728, "lng": 73.0695 }
+    ],
+    "policeStations": [{ "name": "G-10 Police Station", "lat": 33.6846, "lng": 73.0491 }]
+  },
+  "surjani": {
+    "rescueUnits": [
+      { "name": "Rescue 1122 Karachi", "phone": "1122", "type": "flood_rescue", "available": true },
+      { "name": "Edhi", "phone": "115", "type": "ambulance", "available": true }
+    ],
+    "hospitals": [{ "name": "Ziauddin North", "lat": 24.9601, "lng": 67.0625 }]
+  },
+  "faisalabad": {
+    "rescueUnits": [{ "name": "Rescue 1122 Punjab", "phone": "1122", "type": "general_rescue", "available": true }]
+  }
+}

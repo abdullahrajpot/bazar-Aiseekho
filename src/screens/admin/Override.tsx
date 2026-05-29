@@ -10,12 +10,13 @@ import {
   TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { COLORS, SPACING, MONITORED_ROUTES, GOODS, AREAS } from '../../lib/constants';
+import { SPACING, MONITORED_ROUTES, GOODS, AREAS } from '../../lib/constants';
+import { THEME } from '../../lib/theme';
 import { normalizeAreaKey } from '../../lib/area';
 import { ref, remove, update, set, get } from 'firebase/database';
 import { db } from '../../lib/firebase';
 import { useTruthFeed } from '../../hooks/useTruthFeed';
-import { ScreenHeader } from '../../components/ui/ScreenHeader';
+import { DesignHeader } from '../../components/ui/DesignHeader';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
 const STALE_ROUTE_IDS = ['m9_main', 'm2_main', 'N5_main'];
@@ -146,9 +147,10 @@ const Override = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScreenHeader
+      <DesignHeader
         title="Admin override"
-        subtitle="Emergency only — rumours, prices, and routes are set by live agents from APIs and user reports"
+        subtitle="Emergency only — agents normally control routes & truth"
+        showLive={false}
       />
 
       <ScrollView contentContainerStyle={styles.scroll}>
@@ -280,10 +282,10 @@ const Override = () => {
         <View style={styles.card}>
           <TouchableOpacity style={styles.btnSecondary} onPress={clearStaleSimulationData} disabled={loading}>
             {loading ? (
-              <ActivityIndicator color={COLORS.white} />
+              <ActivityIndicator color={THEME.onPrimary} />
             ) : (
               <>
-                <Icon name="database-remove" size={20} color={COLORS.white} style={{ marginRight: 8 }} />
+                <Icon name="database-remove" size={20} color={THEME.onPrimary} style={{ marginRight: 8 }} />
                 <Text style={styles.btnText}>Clear stale test route data</Text>
               </>
             )}
@@ -295,65 +297,65 @@ const Override = () => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background },
+  container: { flex: 1, backgroundColor: THEME.background },
   scroll: { padding: SPACING.lg, paddingBottom: 40 },
   card: {
-    backgroundColor: COLORS.surface,
+    backgroundColor: THEME.surface,
     borderRadius: 12,
     padding: SPACING.lg,
     marginBottom: SPACING.lg,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: THEME.outline,
   },
-  cardTitle: { fontSize: 16, fontWeight: '700', color: COLORS.textPrimary, marginBottom: SPACING.md },
-  hint: { fontSize: 13, color: COLORS.textSecondary, marginBottom: SPACING.sm },
-  label: { fontSize: 12, color: COLORS.textSecondary, marginBottom: SPACING.xs },
+  cardTitle: { fontSize: 16, fontWeight: '700', color: THEME.onSurface, marginBottom: SPACING.md },
+  hint: { fontSize: 13, color: THEME.onSurfaceVariant, marginBottom: SPACING.sm },
+  label: { fontSize: 12, color: THEME.onSurfaceVariant, marginBottom: SPACING.xs },
   chipRow: { marginBottom: SPACING.sm },
   chip: {
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 16,
-    backgroundColor: COLORS.background,
+    backgroundColor: THEME.background,
     marginRight: SPACING.sm,
     maxWidth: 160,
   },
-  chipActive: { backgroundColor: COLORS.primary },
-  chipText: { fontSize: 12, color: COLORS.textSecondary },
-  chipTextActive: { color: COLORS.white, fontWeight: '600' },
+  chipActive: { backgroundColor: THEME.primary },
+  chipText: { fontSize: 12, color: THEME.onSurfaceVariant },
+  chipTextActive: { color: THEME.onPrimary, fontWeight: '600' },
   btnRow: { flexDirection: 'row', gap: SPACING.sm, flexWrap: 'wrap' },
   smallBtn: {
     flex: 1,
     minWidth: 80,
-    backgroundColor: COLORS.primary,
+    backgroundColor: THEME.primary,
     paddingVertical: 10,
     borderRadius: 8,
     alignItems: 'center',
   },
-  smallBtnText: { color: COLORS.white, fontWeight: '600', fontSize: 12 },
+  smallBtnText: { color: THEME.onPrimary, fontWeight: '600', fontSize: 12 },
   input: {
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: THEME.outline,
     borderRadius: 8,
     padding: 12,
     marginBottom: SPACING.sm,
-    backgroundColor: COLORS.background,
+    backgroundColor: THEME.background,
   },
   multiline: { minHeight: 80, textAlignVertical: 'top' },
   btn: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: THEME.primary,
     paddingVertical: 14,
     borderRadius: 10,
     alignItems: 'center',
   },
   btnSecondary: {
-    backgroundColor: COLORS.gray,
+    backgroundColor: THEME.gray,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 14,
     borderRadius: 10,
   },
-  btnText: { color: COLORS.white, fontWeight: '700' },
+  btnText: { color: THEME.onPrimary, fontWeight: '700' },
 });
 
 export default Override;

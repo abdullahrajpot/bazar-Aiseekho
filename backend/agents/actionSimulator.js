@@ -16,25 +16,24 @@ function buildMapRoutes(areaKey, areaLabel, plan, detection) {
   const lat = coord.latitude;
   const lng = coord.longitude;
 
-  const offset = (n) => ({
-    main: [
-      { latitude: lat - 0.02 * n, longitude: lng - 0.02 * n },
-      { latitude: lat - 0.01 * n, longitude: lng - 0.01 * n },
-      { latitude: lat, longitude: lng },
-      { latitude: lat + 0.01 * n, longitude: lng + 0.01 * n },
-      { latitude: lat + 0.02 * n, longitude: lng + 0.02 * n },
-    ],
-    alt: [
-      { latitude: lat - 0.02 * n, longitude: lng - 0.02 * n },
-      { latitude: lat - 0.015 * n, longitude: lng - 0.035 * n },
-      { latitude: lat, longitude: lng - 0.04 * n },
-      { latitude: lat + 0.015 * n, longitude: lng - 0.03 * n },
-      { latitude: lat + 0.02 * n, longitude: lng + 0.02 * n },
-    ],
-  });
+  // Build realistic road-like coordinates relative to city center
+  // Main corridor: east-west through city
+  const mainCoords = [
+    { latitude: lat - 0.03,  longitude: lng - 0.045 },
+    { latitude: lat - 0.015, longitude: lng - 0.025 },
+    { latitude: lat,         longitude: lng },
+    { latitude: lat + 0.01,  longitude: lng + 0.025 },
+    { latitude: lat + 0.02,  longitude: lng + 0.045 },
+  ];
 
-  const n = isKarachiArea(areaKey) ? 1 : 1.2;
-  const coords = offset(n);
+  // Alternate bypass: loops south of city
+  const altCoords = [
+    { latitude: lat - 0.03,  longitude: lng - 0.045 },
+    { latitude: lat - 0.04,  longitude: lng - 0.02 },
+    { latitude: lat - 0.038, longitude: lng + 0.01 },
+    { latitude: lat - 0.025, longitude: lng + 0.035 },
+    { latitude: lat + 0.02,  longitude: lng + 0.045 },
+  ];
 
   return routes.map((r, idx) => {
     const isBlocked = detection.active && plan.blockedRouteId === r.id;
@@ -57,8 +56,8 @@ function buildMapRoutes(areaKey, areaLabel, plan, detection) {
 
     const lineCoords =
       isAlternate || r.road === 'N55' || r.road === 'alt' || r.id.endsWith('_alt')
-        ? coords.alt
-        : coords.main;
+        ? altCoords
+        : mainCoords;
 
     return {
       id: r.id,

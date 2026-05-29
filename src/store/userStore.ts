@@ -4,12 +4,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface UserState {
   uid: string | null;
-  role: 'khareedar' | 'dukandar' | 'admin' | null;
+  role: 'khareedar' | 'admin' | null;
   area: string | null;
   shopId: string | null;
   expoPushToken: string | null;
   setUser: (uid: string) => void;
-  setRoleInfo: (role: 'khareedar' | 'dukandar' | 'admin', area?: string, shopId?: string) => void;
+  setRoleInfo: (role: 'khareedar' | 'admin', area?: string, shopId?: string) => void;
   logout: () => void;
 }
 

@@ -9,7 +9,8 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { COLORS, SPACING, BACKEND_URL } from '../../lib/constants';
+import { SPACING, BACKEND_URL } from '../../lib/constants';
+import { THEME } from '../../lib/theme';
 import { useSupplyStatus } from '../../hooks/useSupplyStatus';
 import { useMarketPrices } from '../../hooks/useMarketPrices';
 import { useShops } from '../../hooks/useShops';
@@ -17,12 +18,13 @@ import { useTruthFeed } from '../../hooks/useTruthFeed';
 import { useSignals } from '../../hooks/useSignals';
 import { useUserStore } from '../../store/userStore';
 import { CrisisMapView } from '../../components/map/CrisisMapView';
-import { ScreenHeader } from '../../components/ui/ScreenHeader';
+import { DesignHeader } from '../../components/ui/DesignHeader';
 import { LoadingState } from '../../components/shared/LoadingState';
 import { EmptyState } from '../../components/shared/EmptyState';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { normalizeAreaKey, getAreaSpecificRoutes, resolveRouteMeta } from '../../lib/area';
 import { useCrisisSituation } from '../../hooks/useCrisisSituation';
+import { useMapIncidents } from '../../hooks/useMapIncidents';
 import { CiroPanel } from '../../components/ciro/CiroPanel';
 
 const MapScreen = () => {
@@ -34,6 +36,7 @@ const MapScreen = () => {
   const { claims } = useTruthFeed(displayArea);
   const { signals } = useSignals(displayArea);
   const { situation, simulation, mapRoutes } = useCrisisSituation(displayArea);
+  const incidents = useMapIncidents(displayArea);
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<'routes' | 'gouging'>('routes');
 
@@ -78,17 +81,14 @@ const MapScreen = () => {
   };
 
   const routeColor = (status?: string) => {
-    if (status === 'blocked' || status === 'disrupted') return COLORS.danger;
-    if (status === 'partial' || status === 'rerouted') return COLORS.warning;
-    return COLORS.fair;
+    if (status === 'blocked' || status === 'disrupted') return THEME.gouging;
+    if (status === 'partial' || status === 'rerouted') return THEME.warning;
+    return THEME.fair;
   };
 
   return (
     <SafeAreaView style={styles.containerFlex}>
-      <ScreenHeader
-        title="Crisis Map"
-        subtitle={`${displayArea} · live routes · shops · agent scans`}
-      />
+      <DesignHeader title="Crisis Map" subtitle={`${displayArea} · routes · agents`} showLive />
 
       <View style={styles.tabs}>
         <TouchableOpacity
@@ -113,6 +113,7 @@ const MapScreen = () => {
           selectedArea={displayArea}
           height={360}
           ciroMapRoutes={mapRoutes}
+          incidents={incidents}
         />
       </View>
 
@@ -143,7 +144,7 @@ const MapScreen = () => {
                 <View key={idx} style={styles.newsCardItem}>
                   <View style={styles.newsMetaRow}>
                     <View style={styles.newsAlertBadge}>
-                      <Icon name="alert-decagram" size={14} color={COLORS.danger} style={{ marginRight: 4 }} />
+                      <Icon name="alert-decagram" size={14} color={THEME.gouging} style={{ marginRight: 4 }} />
                       <Text style={styles.newsAlertBadgeText}>Incident Alert</Text>
                     </View>
                     <Text style={styles.newsTimeText}>
@@ -155,7 +156,7 @@ const MapScreen = () => {
               ))
             ) : (
               <View style={styles.newsCardItemEmpty}>
-                <Icon name="antenna" size={24} color={COLORS.primary} style={{ marginBottom: 6 }} />
+                <Icon name="antenna" size={24} color={THEME.primary} style={{ marginBottom: 6 }} />
                 <Text style={styles.newsEmptyText}>
                   Agents scanned RSS, Reddit, and news for {displayArea}. No unusual corridor alerts in the last cycle.
                 </Text>
@@ -186,10 +187,10 @@ const MapScreen = () => {
                     : 'FLOWING CLEAN';
                     
                 const badgeColor = isBlocked
-                  ? COLORS.danger
+                  ? THEME.gouging
                   : isPartial
-                    ? COLORS.warning
-                    : COLORS.fair;
+                    ? THEME.warning
+                    : THEME.fair;
 
                 const reasoning = backendRoute.reasoning || (isBlocked ? `Bazar Telemetry identified active transit obstruction on ${areaRoute.road} route. Rerouting initialized.` : null);
                 const alternate = backendRoute.alternate || (isBlocked ? (areaRoute.road === 'M9' ? 'N55' : 'local') : null);
@@ -208,18 +209,18 @@ const MapScreen = () => {
                         
                         <View style={styles.metaBox}>
                           <View style={styles.metaRow}>
-                            <Icon name="speedometer" size={14} color={COLORS.gray} style={{ marginRight: 6 }} />
+                            <Icon name="speedometer" size={14} color={THEME.onSurfaceVariant} style={{ marginRight: 6 }} />
                             <Text style={styles.metaVal}>{speed}</Text>
                           </View>
                           <View style={styles.metaRow}>
-                            <Icon name="clock-outline" size={14} color={COLORS.gray} style={{ marginRight: 6 }} />
+                            <Icon name="clock-outline" size={14} color={THEME.onSurfaceVariant} style={{ marginRight: 6 }} />
                             <Text style={styles.metaVal}>Delay: +{backendRoute.extraMinutes ?? backendRoute.extra_minutes ?? 0} mins</Text>
                           </View>
                         </View>
 
                         {reasoning ? (
                           <View style={styles.reasoningBox}>
-                            <Icon name="radar" size={16} color={COLORS.danger} style={{ marginRight: 6, marginTop: 2 }} />
+                            <Icon name="radar" size={16} color={THEME.gouging} style={{ marginRight: 6, marginTop: 2 }} />
                             <Text style={styles.reasoningText}>
                               <Text style={{ fontWeight: '700' }}>Scanned Cause: </Text>
                               {reasoning}
@@ -229,7 +230,7 @@ const MapScreen = () => {
 
                         {alternate ? (
                           <View style={styles.altBox}>
-                            <Icon name="directions-fork" size={16} color={COLORS.primary} style={{ marginRight: 6 }} />
+                            <Icon name="directions-fork" size={16} color={THEME.primary} style={{ marginRight: 6 }} />
                             <Text style={styles.altText}>
                               <Text style={{ fontWeight: '700' }}>Re-routing Recommendation: </Text>
                               Use {alternate === 'N55' ? 'N55 alternate bypass' : alternate} safely.
@@ -261,70 +262,70 @@ const MapScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background },
-  containerFlex: { flex: 1, backgroundColor: COLORS.background },
+  container: { flex: 1, backgroundColor: THEME.background },
+  containerFlex: { flex: 1, backgroundColor: THEME.background },
   tabs: {
     flexDirection: 'row',
     padding: SPACING.md,
     gap: SPACING.sm,
-    backgroundColor: COLORS.surface,
+    backgroundColor: THEME.surface,
   },
   tab: {
     flex: 1,
     paddingVertical: SPACING.sm,
     borderRadius: 8,
     alignItems: 'center',
-    backgroundColor: COLORS.background,
+    backgroundColor: THEME.background,
   },
-  tabActive: { backgroundColor: COLORS.primary },
-  tabText: { color: COLORS.textSecondary, fontWeight: '600' },
-  tabTextActive: { color: COLORS.white },
+  tabActive: { backgroundColor: THEME.primary },
+  tabText: { color: THEME.onSurfaceVariant, fontWeight: '600' },
+  tabTextActive: { color: THEME.onPrimary },
   scroll: { padding: SPACING.lg, paddingBottom: 40 },
   listScroll: { flex: 1 },
   mapCard: {
-    backgroundColor: COLORS.surface,
+    backgroundColor: THEME.surface,
     borderRadius: 12,
     padding: SPACING.sm,
     marginHorizontal: SPACING.lg,
     marginBottom: SPACING.sm,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: THEME.outline,
     overflow: 'hidden',
   },
   listCard: {
-    backgroundColor: COLORS.surface,
+    backgroundColor: THEME.surface,
     borderRadius: 10,
     padding: SPACING.lg,
     marginBottom: SPACING.md,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: THEME.outline,
   },
   row: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACING.md },
   flex: { flex: 1 },
-  cardTitle: { fontSize: 16, fontWeight: '600', color: COLORS.textPrimary },
-  cardMeta: { fontSize: 13, color: COLORS.textSecondary, marginTop: 4 },
-  alt: { fontSize: 13, color: COLORS.primary, marginTop: 4, fontWeight: '500' },
+  cardTitle: { fontSize: 16, fontWeight: '600', color: THEME.onSurface },
+  cardMeta: { fontSize: 13, color: THEME.onSurfaceVariant, marginTop: 4 },
+  alt: { fontSize: 13, color: THEME.primary, marginTop: 4, fontWeight: '500' },
   cardHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 6 },
   badge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
-  badgeText: { color: COLORS.white, fontSize: 10, fontWeight: '700' },
+  badgeText: { color: THEME.onPrimary, fontSize: 10, fontWeight: '700' },
   metaBox: { flexDirection: 'row', gap: 16, marginTop: 8, flexWrap: 'wrap' },
   metaRow: { flexDirection: 'row', alignItems: 'center' },
-  metaVal: { fontSize: 13, color: COLORS.textSecondary },
+  metaVal: { fontSize: 13, color: THEME.onSurfaceVariant },
   reasoningBox: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: '#FEF2F2', padding: 10, borderRadius: 8, marginTop: 12, borderWidth: 1, borderColor: '#FEE2E2' },
   reasoningText: { fontSize: 12, color: '#991B1B', flex: 1, lineHeight: 18 },
   altBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#ECFDF5', padding: 10, borderRadius: 8, marginTop: 8, borderWidth: 1, borderColor: '#D1FAE5' },
   altText: { fontSize: 12, color: '#065F46', flex: 1 },
-  newsSection: { backgroundColor: COLORS.surface, borderRadius: 12, borderWidth: 1, borderColor: COLORS.border, padding: SPACING.lg, marginBottom: SPACING.lg },
+  newsSection: { backgroundColor: THEME.surface, borderRadius: 12, borderWidth: 1, borderColor: THEME.outline, padding: SPACING.lg, marginBottom: SPACING.lg },
   newsHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: SPACING.md },
-  newsTitle: { fontSize: 15, fontWeight: '700', color: COLORS.textPrimary },
-  newsCardItem: { backgroundColor: COLORS.background, borderRadius: 10, padding: 12, borderLeftWidth: 4, borderLeftColor: '#1DA1F2', marginBottom: SPACING.sm },
+  newsTitle: { fontSize: 15, fontWeight: '700', color: THEME.onSurface },
+  newsCardItem: { backgroundColor: THEME.background, borderRadius: 10, padding: 12, borderLeftWidth: 4, borderLeftColor: '#1DA1F2', marginBottom: SPACING.sm },
   newsMetaRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
   newsAlertBadge: { flexDirection: 'row', alignItems: 'center' },
-  newsAlertBadgeText: { fontSize: 11, fontWeight: '700', color: COLORS.danger },
-  newsTimeText: { fontSize: 11, color: COLORS.textTertiary },
-  newsBodyText: { fontSize: 13, color: COLORS.textPrimary, lineHeight: 18 },
+  newsAlertBadgeText: { fontSize: 11, fontWeight: '700', color: THEME.gouging },
+  newsTimeText: { fontSize: 11, color: THEME.onSurfaceVariant },
+  newsBodyText: { fontSize: 13, color: THEME.onSurface, lineHeight: 18 },
   newsCardItemEmpty: { alignItems: 'center', paddingVertical: SPACING.lg },
-  newsEmptyText: { fontSize: 12, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 18 },
+  newsEmptyText: { fontSize: 12, color: THEME.onSurfaceVariant, textAlign: 'center', lineHeight: 18 },
 });
 
 export default MapScreen;

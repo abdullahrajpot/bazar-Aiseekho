@@ -2,7 +2,9 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useUserStore } from '../store/userStore';
-import { COLORS, AREAS } from '../lib/constants';
+import { AREAS } from '../lib/constants';
+import { THEME } from '../lib/theme';
+import { DesignHeader } from '../components/ui/DesignHeader';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { signOut } from 'firebase/auth';
 import { auth, db } from '../lib/firebase';
@@ -36,16 +38,15 @@ const Profile = () => {
 
   const pickArea = async (label: string) => {
     if (!role) {
-      Alert.alert('Role required', 'Sign in as khareedar, dukandar, or admin first.');
+      Alert.alert('Role required', 'Sign in as citizen or admin first.');
       return;
     }
-    const areaFormatted = label.toLowerCase().replace(/\s+/g, '_').replace(/—/g, '_').replace(/_+/g, '_');
-    setRoleInfo(role, areaFormatted);
+    setRoleInfo(role, label);
     setPickerOpen(false);
 
     if (uid) {
       try {
-        await update(ref(db, `users/${uid}`), { area: areaFormatted });
+        await update(ref(db, `users/${uid}`), { area: label });
       } catch (err: any) {
         console.warn('Could not update area in Firebase:', err.message);
       }
@@ -54,12 +55,15 @@ const Profile = () => {
 
   return (
     <SafeAreaView style={styles.container}>
+      <DesignHeader title="Profile" showLive={false} />
       <ScrollView contentContainerStyle={styles.scroll}>
         <View style={styles.header}>
           <View style={styles.avatarContainer}>
-            <Icon name="account" size={64} color={COLORS.white} />
+            <Icon name="account" size={64} color={THEME.onPrimary} />
           </View>
-          <Text style={styles.username}>{role ? role.toUpperCase() : 'Guest User'}</Text>
+          <Text style={styles.username}>
+            {role === 'khareedar' ? 'Citizen' : role === 'admin' ? 'Admin' : 'Guest'}
+          </Text>
           <Text style={styles.email}>{uid}</Text>
         </View>
 
@@ -67,7 +71,7 @@ const Profile = () => {
           <Text style={styles.cardTitle}>Profile Information</Text>
 
           <View style={styles.infoRow}>
-            <Icon name="shield-account-outline" size={24} color={COLORS.primary} style={styles.rowIcon} />
+            <Icon name="shield-account-outline" size={24} color={THEME.primary} style={styles.rowIcon} />
             <View>
               <Text style={styles.infoLabel}>Assigned Role</Text>
               <Text style={styles.infoValue}>{role ? role.charAt(0).toUpperCase() + role.slice(1) : 'None'}</Text>
@@ -75,12 +79,12 @@ const Profile = () => {
           </View>
 
           <View style={styles.infoRow}>
-            <Icon name="map-marker-outline" size={24} color={COLORS.primary} style={styles.rowIcon} />
+            <Icon name="map-marker-outline" size={24} color={THEME.tertiary} style={styles.rowIcon} />
             <View style={{ flex: 1 }}>
               <Text style={styles.infoLabel}>Your market (Pakistan)</Text>
               <Text style={styles.infoValue}>{area || 'Not selected — tap below'}</Text>
               <TouchableOpacity style={styles.areaBtn} onPress={() => setPickerOpen(!pickerOpen)}>
-                <Icon name="map-search-outline" size={18} color={COLORS.white} style={{ marginRight: 8 }} />
+                <Icon name="map-search-outline" size={18} color={THEME.onPrimary} style={{ marginRight: 8 }} />
                 <Text style={styles.areaBtnText}>{pickerOpen ? 'Hide cities' : 'Choose city / area'}</Text>
               </TouchableOpacity>
               {pickerOpen ? (
@@ -99,24 +103,15 @@ const Profile = () => {
                 </View>
               ) : null}
               <Text style={styles.areaHint}>
-                Truth feed, fair prices, gouging shops, and the active map viewport dynamically pan to follow your selected area.
+                CIRO map, crisis alerts, routes, and agent-managed prices update for this area after you change it.
               </Text>
             </View>
           </View>
 
-          {role === 'dukandar' && (
-            <View style={styles.infoRow}>
-              <Icon name="storefront-outline" size={24} color={COLORS.primary} style={styles.rowIcon} />
-              <View>
-                <Text style={styles.infoLabel}>Registered Shop ID</Text>
-                <Text style={styles.infoValue}>{shopId || 'Pending'}</Text>
-              </View>
-            </View>
-          )}
         </View>
 
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-          <Icon name="logout" size={24} color={COLORS.white} style={styles.logoutIcon} />
+          <Icon name="logout" size={24} color={THEME.onPrimary} style={styles.logoutIcon} />
           <Text style={styles.logoutText}>Sign Out</Text>
         </TouchableOpacity>
       </ScrollView>
@@ -125,135 +120,69 @@ const Profile = () => {
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  scroll: {
-    flexGrow: 1,
-    padding: 24,
-  },
-  header: {
-    alignItems: 'center',
-    marginBottom: 32,
-  },
+  container: { flex: 1, backgroundColor: THEME.background },
+  scroll: { flexGrow: 1, padding: 20, paddingBottom: 40 },
+  header: { alignItems: 'center', marginBottom: 24, marginTop: 8 },
   avatarContainer: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: COLORS.primary,
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: THEME.primaryContainer,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
-    shadowColor: COLORS.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+    marginBottom: 12,
+    borderWidth: 0.5,
+    borderColor: THEME.outline,
   },
-  username: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#1F2937',
-  },
-  email: {
-    fontSize: 14,
-    color: COLORS.gray,
-    marginTop: 4,
-  },
+  username: { fontSize: 22, fontWeight: '700', color: THEME.onSurface },
+  email: { fontSize: 12, color: THEME.onSurfaceVariant, marginTop: 4 },
   infoCard: {
-    backgroundColor: COLORS.white,
-    borderRadius: 16,
+    backgroundColor: THEME.surface,
+    borderRadius: THEME.radiusCard,
     padding: 20,
-    marginBottom: 32,
-    borderWidth: 1,
-    borderColor: COLORS.lightGray,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    marginBottom: 24,
+    borderWidth: 0.5,
+    borderColor: THEME.outline,
   },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1F2937',
-    marginBottom: 20,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 20,
-  },
-  rowIcon: {
-    marginRight: 16,
-    marginTop: 2,
-  },
-  infoLabel: {
-    fontSize: 12,
-    color: COLORS.gray,
-  },
-  infoValue: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1F2937',
-    marginTop: 2,
-  },
+  cardTitle: { fontSize: 16, fontWeight: '700', color: THEME.onSurface, marginBottom: 16 },
+  infoRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 20 },
+  rowIcon: { marginRight: 14, marginTop: 2 },
+  infoLabel: { fontSize: 11, fontWeight: '600', color: THEME.onSurfaceVariant, letterSpacing: 0.3 },
+  infoValue: { fontSize: 16, fontWeight: '600', color: THEME.onSurface, marginTop: 2 },
   areaBtn: {
     marginTop: 10,
-    backgroundColor: COLORS.primary,
+    backgroundColor: THEME.primaryContainer,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 10,
-    borderRadius: 10,
+    borderRadius: THEME.radiusBtn,
   },
-  areaBtnText: { color: COLORS.white, fontWeight: '700', fontSize: 14 },
-  chipWrap: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 12,
-  },
+  areaBtnText: { color: THEME.onPrimary, fontWeight: '700', fontSize: 14 },
+  chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
   chip: {
     paddingHorizontal: 10,
     paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: COLORS.background,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    borderRadius: THEME.radiusBtn,
+    backgroundColor: THEME.surfaceDim,
+    borderWidth: 0.5,
+    borderColor: THEME.outline,
     maxWidth: '48%',
   },
-  chipActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
-  chipText: { fontSize: 12, color: COLORS.textSecondary },
-  chipTextActive: { color: COLORS.white, fontWeight: '600' },
-  areaHint: {
-    fontSize: 11,
-    color: COLORS.textTertiary,
-    marginTop: 10,
-    lineHeight: 16,
-  },
+  chipActive: { backgroundColor: THEME.primary, borderColor: THEME.primary },
+  chipText: { fontSize: 12, color: THEME.onSurfaceVariant },
+  chipTextActive: { color: THEME.onPrimary, fontWeight: '600' },
+  areaHint: { fontSize: 11, color: THEME.onSurfaceVariant, marginTop: 10, lineHeight: 16 },
   logoutButton: {
-    backgroundColor: COLORS.danger,
-    height: 56,
+    backgroundColor: THEME.error,
+    height: 52,
     borderRadius: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: COLORS.danger,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
   },
-  logoutIcon: {
-    marginRight: 8,
-  },
-  logoutText: {
-    color: COLORS.white,
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
+  logoutIcon: { marginRight: 8 },
+  logoutText: { color: THEME.onPrimary, fontSize: 16, fontWeight: '600' },
 });
 
 export default Profile;

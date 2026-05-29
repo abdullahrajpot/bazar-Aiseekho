@@ -1,0 +1,32 @@
+{
+  "flood": {
+    "triggerKeywords": ["pani bhar", "flooding", "naala", "سیلاب", "بارش", "submerged", "waterlog"],
+    "defaultLocations": ["Surjani Town", "Orangi", "Islamabad", "G-10"],
+    "typicalDurationHours": 4,
+    "defaultActions": ["traffic_reroute", "emergency_dispatch", "public_alert", "supply_reroute"]
+  },
+  "heatwave": {
+    "triggerKeywords": ["heat stroke", "garmi", "temperature", "گرمی", "heatwave"],
+    "defaultLocations": ["Karachi", "Lahore", "Multan"],
+    "typicalDurationHours": 8,
+    "defaultActions": ["public_alert", "infrastructure_fix", "emergency_dispatch"]
+  },
+  "road_blockage": {
+    "triggerKeywords": ["band", "blocked", "jam", "رکاوٹ", "traffic", "congestion"],
+    "defaultLocations": ["M9", "G-10", "Main Boulevard"],
+    "typicalDurationHours": 2,
+    "defaultActions": ["traffic_reroute", "emergency_dispatch", "public_alert"]
+  },
+  "accident": {
+    "triggerKeywords": ["accident", "crash", "hadsa", "حادثہ", "injured", "collision"],
+    "defaultLocations": ["M9", "Ring Road", "GT Road"],
+    "typicalDurationHours": 1,
+    "defaultActions": ["emergency_dispatch", "traffic_reroute", "public_alert"]
+  },
+  "infrastructure": {
+    "triggerKeywords": ["power cut", "load shedding", "bijli", "بجلی", "gas cut"],
+    "defaultLocations": ["city-wide"],
+    "typicalDurationHours": 6,
+    "defaultActions": ["public_alert", "infrastructure_fix", "emergency_dispatch"]
+  }
+}

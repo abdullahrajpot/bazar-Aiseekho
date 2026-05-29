@@ -136,47 +136,57 @@ export function getAreaSpecificRoutes(selectedArea: string | null): AreaRoute[] 
     ];
   }
 
-  // Generate localized premium dynamic routes for cities/regions in Punjab, KPK, Balochistan, etc.
+  // Generate localized routes for cities/regions in Punjab, KPK, Balochistan, etc.
+  // Use realistic road-like waypoints relative to the city center
   const lat = coord.latitude;
   const lng = coord.longitude;
   const namePrefix = displayArea.split(' — ').pop() || displayArea;
+
+  // Main corridor: runs roughly east-west through city center
+  const mainCoords = [
+    { latitude: lat - 0.03,  longitude: lng - 0.045 },
+    { latitude: lat - 0.015, longitude: lng - 0.025 },
+    { latitude: lat,         longitude: lng },
+    { latitude: lat + 0.01,  longitude: lng + 0.025 },
+    { latitude: lat + 0.02,  longitude: lng + 0.045 },
+  ];
+
+  // Alternate bypass: loops around the south of the city
+  const altCoords = [
+    { latitude: lat - 0.03,  longitude: lng - 0.045 },
+    { latitude: lat - 0.04,  longitude: lng - 0.02 },
+    { latitude: lat - 0.038, longitude: lng + 0.01 },
+    { latitude: lat - 0.025, longitude: lng + 0.035 },
+    { latitude: lat + 0.02,  longitude: lng + 0.045 },
+  ];
+
+  // Mandi/grain link: short spur from city center to market area
+  const mandiCoords = [
+    { latitude: lat + 0.005, longitude: lng - 0.01 },
+    { latitude: lat + 0.015, longitude: lng + 0.005 },
+    { latitude: lat + 0.025, longitude: lng + 0.015 },
+    { latitude: lat + 0.03,  longitude: lng + 0.025 },
+  ];
 
   return [
     {
       id: `${key}_main`,
       name: `M-Highway — ${namePrefix} Main Corridor`,
-      road: 'M9', // Bind to M9 status simulator
-      coordinates: [
-        { latitude: lat - 0.025, longitude: lng - 0.025 },
-        { latitude: lat - 0.012, longitude: lng - 0.012 },
-        { latitude: lat, longitude: lng },
-        { latitude: lat + 0.012, longitude: lng + 0.012 },
-        { latitude: lat + 0.025, longitude: lng + 0.025 },
-      ]
+      road: 'M9',
+      coordinates: mainCoords,
     },
     {
       id: `${key}_alt`,
       name: `Bypass — ${namePrefix} Alternate Loop`,
-      road: 'N55', // Bind to N55 status
-      coordinates: [
-        { latitude: lat - 0.025, longitude: lng - 0.025 },
-        { latitude: lat - 0.020, longitude: lng - 0.035 },
-        { latitude: lat, longitude: lng - 0.040 },
-        { latitude: lat + 0.020, longitude: lng - 0.025 },
-        { latitude: lat + 0.025, longitude: lng + 0.025 },
-      ]
+      road: 'N55',
+      coordinates: altCoords,
     },
     {
       id: `${key}_mandi`,
       name: `Mandi Road — ${namePrefix} Grain Link`,
-      road: 'SHP', // Bind to SHP status
-      coordinates: [
-        { latitude: lat - 0.015, longitude: lng + 0.015 },
-        { latitude: lat - 0.005, longitude: lng + 0.010 },
-        { latitude: lat + 0.005, longitude: lng - 0.005 },
-        { latitude: lat + 0.015, longitude: lng - 0.015 },
-      ]
-    }
+      road: 'SHP',
+      coordinates: mandiCoords,
+    },
   ];
 }
 

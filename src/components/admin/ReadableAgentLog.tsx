@@ -1,6 +1,8 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
-import { COLORS, SPACING } from '../../lib/constants';
+import { SPACING } from '../../lib/constants';
+import { THEME } from '../../lib/theme';
+import { humanizeAgentMessage } from '../../lib/humanizeAgentLog';
 
 export interface AgentLogEntry {
   id: string;
@@ -51,10 +53,10 @@ const rowStyles = StyleSheet.create({
     flexDirection: 'row',
     paddingVertical: 6,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: COLORS.border,
+    borderBottomColor: THEME.outline,
   },
-  label: { width: '38%', fontSize: 12, color: COLORS.textTertiary, fontWeight: '600' },
-  value: { flex: 1, fontSize: 13, color: COLORS.textPrimary, flexWrap: 'wrap' },
+  label: { width: '38%', fontSize: 12, color: THEME.onSurfaceVariant, fontWeight: '600' },
+  value: { flex: 1, fontSize: 13, color: THEME.onSurface, flexWrap: 'wrap' },
 });
 
 interface Props {
@@ -66,6 +68,7 @@ interface Props {
 export function ReadableAgentLog({ entry, expanded, onToggle }: Props) {
   const parsed = tryParseJson(entry.rawOutput);
   const timeStr = entry.timestamp ? new Date(entry.timestamp).toLocaleString() : '';
+  const plain = humanizeAgentMessage(entry.agent || '', entry.action || '', entry.detail || '');
 
   const isBreakPayload =
     parsed &&
@@ -79,15 +82,11 @@ export function ReadableAgentLog({ entry, expanded, onToggle }: Props) {
       onPress={onToggle}
     >
       <View style={styles.headerRow}>
-        <Text style={styles.agent}>{formatAgent(entry.agent)}</Text>
+        <Text style={styles.agent}>{plain.title}</Text>
         <Text style={styles.time}>{timeStr}</Text>
       </View>
-      {entry.action ? (
-        <View style={styles.actionPill}>
-          <Text style={styles.actionText}>{entry.action}</Text>
-        </View>
-      ) : null}
-      {entry.detail ? <Text style={styles.detail}>{entry.detail}</Text> : null}
+      <Text style={styles.detail}>{plain.detail}</Text>
+      {plain.meta ? <Text style={styles.metaHint}>{plain.meta}</Text> : null}
       <Text style={styles.tapHint}>{expanded ? 'Tap to collapse' : 'Tap for structured details'}</Text>
 
       {expanded && isBreakPayload ? (
@@ -131,47 +130,39 @@ export function ReadableAgentLog({ entry, expanded, onToggle }: Props) {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: COLORS.surface,
-    borderRadius: 12,
+    backgroundColor: THEME.surface,
+    borderRadius: THEME.radiusCard,
     padding: SPACING.lg,
     marginBottom: SPACING.md,
     borderLeftWidth: 4,
-    borderLeftColor: COLORS.primary,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    borderLeftColor: THEME.agentSupply,
+    borderWidth: 0.5,
+    borderColor: THEME.outline,
   },
-  cardCritical: { borderLeftColor: COLORS.danger },
+  cardCritical: { borderLeftColor: THEME.error },
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginBottom: 6,
   },
-  agent: { fontSize: 15, fontWeight: '700', color: COLORS.primary, flex: 1 },
-  time: { fontSize: 11, color: COLORS.textTertiary },
-  actionPill: {
-    alignSelf: 'flex-start',
-    backgroundColor: COLORS.background,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-    marginBottom: 8,
-  },
-  actionText: { fontSize: 12, fontWeight: '700', color: COLORS.textPrimary },
-  detail: { fontSize: 14, color: COLORS.textSecondary, lineHeight: 22, marginBottom: 6 },
-  tapHint: { fontSize: 11, color: COLORS.textTertiary, fontStyle: 'italic' },
+  agent: { fontSize: 15, fontWeight: '700', color: THEME.onSurface, flex: 1 },
+  time: { fontSize: 11, color: THEME.onSurfaceVariant },
+  detail: { fontSize: 14, color: THEME.onSurfaceVariant, lineHeight: 22, marginBottom: 6 },
+  metaHint: { fontSize: 12, color: THEME.primary, marginBottom: 6 },
+  tapHint: { fontSize: 11, color: THEME.onSurfaceVariant, fontStyle: 'italic' },
   breakPanel: {
     marginTop: SPACING.md,
     padding: SPACING.md,
-    backgroundColor: COLORS.background,
+    backgroundColor: THEME.surfaceDim,
     borderRadius: 10,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    borderWidth: 0.5,
+    borderColor: THEME.outline,
   },
-  panelTitle: { fontSize: 13, fontWeight: '700', color: COLORS.textPrimary, marginBottom: 8 },
+  panelTitle: { fontSize: 13, fontWeight: '700', color: THEME.onSurface, marginBottom: 8 },
   reasonBlock: { marginTop: 8 },
-  reasonLabel: { fontSize: 12, fontWeight: '600', color: COLORS.textTertiary, marginBottom: 4 },
-  reasonText: { fontSize: 14, color: COLORS.textPrimary, lineHeight: 22 },
+  reasonLabel: { fontSize: 12, fontWeight: '600', color: THEME.onSurfaceVariant, marginBottom: 4 },
+  reasonText: { fontSize: 14, color: THEME.onSurface, lineHeight: 22 },
   rawScroll: { maxHeight: 200, marginTop: SPACING.sm },
-  rawFallback: { fontSize: 11, fontFamily: 'monospace', color: COLORS.textSecondary },
+  rawFallback: { fontSize: 11, fontFamily: 'monospace', color: THEME.onSurfaceVariant },
 });

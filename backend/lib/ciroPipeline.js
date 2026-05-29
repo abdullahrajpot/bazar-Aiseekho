@@ -9,6 +9,7 @@
 const { detectCrisis } = require('../agents/crisisDetector');
 const { planActions } = require('../agents/actionPlanner');
 const { simulateActions } = require('../agents/actionSimulator');
+const { syncMapOverlayFromDetection } = require('./mapOverlayWriter');
 
 const PIPELINE_STAGES = [
   'signal_ingestion',
@@ -34,6 +35,10 @@ async function runCiroForArea(areaLabel, allSignals) {
       severity: detection.severity,
     },
   });
+
+  if (detection.active) {
+    await syncMapOverlayFromDetection(areaLabel, detection);
+  }
 
   trace.stages.push({ stage: 'action_planning', agent: 'action_planner', status: 'running' });
   const plan = await planActions(detection, areaLabel);

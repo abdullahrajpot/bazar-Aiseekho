@@ -1,8 +1,13 @@
 import React, { useState, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, RefreshControl, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { COLORS, BACKEND_URL } from '../../lib/constants';
+import { THEME } from '../../lib/theme';
+import { BACKEND_URL } from '../../lib/constants';
 import { useAgentLog } from '../../hooks/useAgentLog';
+import { useActionLog } from '../../hooks/useActionLog';
+import { DesignHeader } from '../../components/ui/DesignHeader';
+import { IntelligenceCard } from '../../components/ui/IntelligenceCard';
+import { humanizeAgentMessage } from '../../lib/humanizeAgentLog';
 import { useUserStore } from '../../store/userStore';
 import { useSignals } from '../../hooks/useSignals';
 import { useAreaAlerts } from '../../hooks/useAreaAlerts';
@@ -11,8 +16,6 @@ import { useCrisisSituation } from '../../hooks/useCrisisSituation';
 import { CiroPanel } from '../../components/ciro/CiroPanel';
 import { useRouteRecommendations } from '../../hooks/useRouteRecommendations';
 import { normalizeAreaKey } from '../../lib/area';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-
 const SOCIAL_SOURCES = new Set([
   'twitter',
   'whatsapp',
@@ -35,6 +38,7 @@ function matchesArea(text: string, areaKey: string, displayArea: string) {
 
 const Alerts = () => {
   const { logs, loading: logsLoading } = useAgentLog();
+  const { entries: ciroLogs } = useActionLog();
   const { area } = useUserStore();
   const displayArea = area || 'Surjani Town';
   const { signals, loading: signalsLoading } = useSignals(displayArea);
@@ -60,11 +64,11 @@ const Alerts = () => {
   const getAlertIcon = (severity: string) => {
     switch (severity) {
       case 'critical':
-        return { name: 'alert-decagram', color: COLORS.danger };
+        return { name: 'alert-decagram', color: THEME.error };
       case 'warning':
-        return { name: 'alert', color: COLORS.warning };
+        return { name: 'alert', color: THEME.warning };
       default:
-        return { name: 'information-outline', color: COLORS.primary };
+        return { name: 'information-outline', color: THEME.primary };
     }
   };
 
@@ -173,6 +177,20 @@ const Alerts = () => {
       });
     }
 
+    ciroLogs.slice(0, 15).forEach((e) => {
+      const id = `ciro-${e.id}`;
+      if (seen.has(id)) return;
+      seen.add(id);
+      list.push({
+        id,
+        agent: e.agent || 'ciro',
+        action: e.action || 'update',
+        severity: e.severity === 'critical' ? 'critical' : 'info',
+        detail: e.detail || '',
+        timestamp: e.timestamp || Date.now(),
+      });
+    });
+
     list.sort((a, b) => b.timestamp - a.timestamp);
 
     if (list.length === 0) {
@@ -187,19 +205,26 @@ const Alerts = () => {
     }
 
     return list.slice(0, 25);
-  }, [logs, signals, areaAlerts, truthClaims, displayArea, areaKey, recommendation]);
+  }, [logs, signals, areaAlerts, truthClaims, ciroLogs, displayArea, areaKey, recommendation]);
+
+  const agentStrip = (agent: string): 'ciro' | 'supply' | 'truth' | 'default' => {
+    if (agent.includes('ciro') || agent.includes('crisis') || agent.includes('emergency')) return 'ciro';
+    if (agent.includes('supply') || agent.includes('router')) return 'supply';
+    if (agent.includes('rumour') || agent.includes('truth')) return 'truth';
+    return 'default';
+  };
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>ہنگامی الرٹس | Agent Alerts</Text>
-        <Text style={styles.subtitle}>
-          Scanned for <Text style={styles.areaHighlight}>{displayArea}</Text> only
-        </Text>
-      </View>
+      <DesignHeader
+        title="Crisis alerts"
+        subtitle={`Live intelligence for ${displayArea}`}
+        showLive
+        onRefresh={onRefresh}
+      />
 
       {loading ? (
-        <ActivityIndicator size="large" color={COLORS.primary} style={styles.loader} />
+        <ActivityIndicator size="large" color={THEME.primary} style={styles.loader} />
       ) : (
         <ScrollView
           contentContainerStyle={styles.scroll}
@@ -212,42 +237,28 @@ const Alerts = () => {
             areaLabel={displayArea}
           />
 
-          <View style={styles.scannerBadge}>
-            <View style={styles.badgeRow}>
-              <Icon name="radar" size={20} color={COLORS.primary} style={{ marginRight: 8 }} />
-              <Text style={styles.badgeText}>
-                AI agents scanning social + news for {displayArea}
-              </Text>
-            </View>
-            <Text style={styles.badgeSub}>
-              {signals.length} live signals · pull to refresh agents
-            </Text>
-          </View>
+          <Text style={styles.sectionLabel}>INTELLIGENCE FEED · {signals.length} signals</Text>
 
           {combinedAlerts.map((log) => {
             const icon = getAlertIcon(log.severity);
-            const dateStr = new Date(log.timestamp).toLocaleTimeString([], {
-              hour: '2-digit',
-              minute: '2-digit',
-            });
-
+            const plain = humanizeAgentMessage(log.agent, log.action, log.detail);
             return (
-              <View
+              <IntelligenceCard
                 key={log.id}
-                style={[
-                  styles.card,
-                  log.severity === 'critical' && styles.cardCritical,
-                  log.severity === 'info' && styles.cardInfo,
-                ]}
-              >
-                <View style={styles.cardHeader}>
-                  <Icon name={icon.name} size={24} color={icon.color} style={{ marginRight: 8 }} />
-                  <Text style={styles.agentType}>{log.agent.replace(/_/g, ' ')}</Text>
-                  <Text style={styles.time}>{dateStr}</Text>
-                </View>
-                <Text style={styles.action}>{log.action.replace(/_/g, ' ').toUpperCase()}</Text>
-                <Text style={styles.detail}>{log.detail}</Text>
-              </View>
+                agent={agentStrip(log.agent)}
+                severity={
+                  log.severity === 'critical'
+                    ? 'critical'
+                    : log.severity === 'warning'
+                      ? 'warning'
+                      : 'info'
+                }
+                title={plain.title}
+                detail={plain.detail}
+                timestamp={log.timestamp}
+                meta={plain.meta}
+                icon={icon.name}
+              />
             );
           })}
         </ScrollView>
@@ -257,44 +268,16 @@ const Alerts = () => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background },
-  header: {
-    padding: 20,
-    backgroundColor: COLORS.white,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.lightGray,
+  container: { flex: 1, backgroundColor: THEME.background },
+  scroll: { padding: 16, paddingBottom: 32 },
+  sectionLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    color: THEME.onSurfaceVariant,
+    marginBottom: 12,
   },
-  title: { fontSize: 24, fontWeight: 'bold', color: COLORS.primary },
-  subtitle: { fontSize: 14, color: COLORS.gray, marginTop: 4 },
-  areaHighlight: { color: COLORS.primary, fontWeight: 'bold' },
-  scannerBadge: {
-    backgroundColor: '#EBF5F0',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    borderLeftWidth: 4,
-    borderLeftColor: COLORS.primary,
-  },
-  badgeRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
-  badgeText: { color: '#0F5132', fontSize: 14, fontWeight: '600', flex: 1 },
-  badgeSub: { color: '#146C43', fontSize: 12, marginLeft: 28 },
-  scroll: { padding: 16 },
   loader: { marginTop: 40 },
-  card: {
-    backgroundColor: COLORS.white,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: COLORS.lightGray,
-  },
-  cardCritical: { borderColor: COLORS.danger, borderLeftWidth: 4 },
-  cardInfo: { borderColor: COLORS.primary, borderLeftWidth: 4 },
-  cardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-  agentType: { fontWeight: 'bold', fontSize: 14, color: '#374151', flex: 1 },
-  time: { fontSize: 12, color: COLORS.gray },
-  action: { fontSize: 15, fontWeight: 'bold', color: '#1F2937', marginBottom: 6 },
-  detail: { fontSize: 14, color: '#4B5563', lineHeight: 20 },
 });
 
 export default Alerts;
